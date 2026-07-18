@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and mathematical guide to HSTU and generative recommendation.">
+  <title>HSTU · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body data-guide-title="HSTU" style="--accent:#176b52;--accent-dark:#104b3a;--accent-soft:#dcece5">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">HS</span><span>HSTU</span></div>
+      <p>Generative recommendation as sequential transduction, explained from first principles.</p>
+    </div>
+    <div class="nav-label">Build the idea</div>
+    <button class="tab-btn active" data-tab="overview"><span class="num">00</span>Start here</button>
+    <button class="tab-btn" data-tab="reframe"><span class="num">01</span>DLRM → generative</button>
+    <button class="tab-btn" data-tab="block"><span class="num">02</span>Inside an HSTU layer</button>
+    <button class="tab-btn" data-tab="attention"><span class="num">03</span>Pointwise attention</button>
+    <div class="nav-label">Make it real</div>
+    <button class="tab-btn" data-tab="systems"><span class="num">04</span>Training &amp; serving</button>
+    <button class="tab-btn" data-tab="worked"><span class="num">05</span>Worked example</button>
+    <button class="tab-btn" data-tab="evidence"><span class="num">06</span>Evidence &amp; limits</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">07</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">08</span>Paper &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20Feature%20Interactions/">Feature Interactions</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">HSTU / Start here</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/HSTU.pdf">PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Generative recommendation · ICML 2024</div>
+      <h1>Actions become the sequence.</h1>
+      <p class="lede">HSTU is easier to understand once you separate two ideas: a recommender can be reformulated as a sequence model, and that sequence model needs a block designed for long, sparse, time-stamped behavior histories.</p>
+      <div class="meta-row"><span class="chip primary">sequential transduction</span><span class="chip">pointwise attention</span><span class="chip">temporal bias</span><span class="chip">gated interaction</span><span class="chip">systems co-design</span></div>
+      <div class="hero-rule"></div>
+
+      <h2>The problem in one picture</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>From engineered snapshots to a behavior language</strong><span>Read left to right</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  RAW["Raw events<br/>view, click, share, time"] --> SEQ["Unified token stream<br/>item, action, timestamp"]
+  SEQ --> H1["HSTU layer 1"] --> HN["HSTU layer L"]
+  HN --> RET["Retrieval<br/>predict next content"]
+  HN --> RANK["Ranking<br/>predict action on target"]
+  class RAW input; class SEQ param; class H1,HN op; class RET,RANK output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dcece5,stroke:#176b52,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The paper calls the full paradigm a Generative Recommender (GR). HSTU is the encoder block that makes the long behavior sequence practical; the two terms are related but not synonyms.</figcaption>
+      </figure>
+
+      <div class="grid3">
+        <div class="concept"><h3>1 · Reframe</h3><p>Replace many hand-engineered snapshots with a chronological stream of high-cardinality categorical events.</p></div>
+        <div class="concept"><h3>2 · Transduce</h3><p>Predict the next content token for retrieval or the response token attached to a candidate for ranking.</p></div>
+        <div class="concept"><h3>3 · Scale</h3><p>Use an attention block, sparse-length training, fused kernels, and amortized candidate scoring designed together.</p></div>
+      </div>
+
+      <h2>Four facts to keep separate</h2>
+      <div class="grid2">
+        <div class="note"><h3>HSTU is not merely “a faster Transformer.”</h3><p>Its pointwise attention deliberately removes sequence-wise softmax normalization, and its output uses an elementwise gate instead of a standard Transformer feed-forward sublayer.</p></div>
+        <div class="note"><h3>Generative does not only mean text generation.</h3><p>The output vocabulary can contain atomic item and action IDs. The model generates recommendations by modeling a probability distribution over those tokens.</p></div>
+        <div class="note"><h3>Ranking and retrieval use different targets.</h3><p>Retrieval predicts which content comes next. Ranking inserts a target item into the causal stream and predicts the action a user would take on it.</p></div>
+        <div class="note"><h3>The trillion parameters are mostly embeddings.</h3><p>Large, non-stationary ID vocabularies make embedding storage central. The paper separately studies scaling of embedding and non-embedding capacity.</p></div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>Sequence the actions → aggregate history without softmax → gate the result → amortize the expensive work across targets.</p></div>
+      <div class="paper"><div><strong>Actions Speak Louder than Words</strong>Zhai et al., ICML 2024 · arXiv:2402.17152</div><div class="paper-links"><a href="papers/HSTU.pdf">Local PDF</a><a href="https://arxiv.org/abs/2402.17152">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="reframe"><div class="page">
+      <div class="eyebrow">Step 1 · Change the representation</div>
+      <h1>From feature snapshots to sequential transduction.</h1>
+      <p class="lede">A traditional DLRM sees a constructed feature vector for one impression. A Generative Recommender sees the evolving history itself and reuses one causal encoding for many supervised positions.</p>
+
+      <h2>What a DLRM snapshot hides</h2>
+      <div class="pipeline">
+        <div class="stage"><strong>Event log</strong><small>views, skips, likes, follows</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Feature jobs</strong><small>counts, ratios, decays, windows</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>One impression</strong><small>thousands of sparse/dense fields</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>DLRM</strong><small>feature extraction + crosses + heads</small></div>
+      </div>
+      <p>For example, “7 sports-video clicks in 24 hours” is a lossy summary of seven events, their ordering, their exact times, and what happened between them. The GR approach keeps more of that raw structure in a shared timeline.</p>
+
+      <h2>A tiny behavior language</h2>
+      <div class="diagram">
+        <div class="diagram-head"><strong>Interleave content and response tokens</strong><span>Φ = content, a = action</span></div>
+        <div class="diagram-body">
+          <div class="token-stream" aria-label="Interleaved content and action token sequence">
+            <span class="token item">Φ₀<br><small>video 18</small></span><span class="arrow">→</span><span class="token action">a₀<br><small>view</small></span><span class="arrow">→</span>
+            <span class="token item">Φ₁<br><small>video 91</small></span><span class="arrow">→</span><span class="token action">a₁<br><small>skip</small></span><span class="arrow">→</span>
+            <span class="token target">Φ₂<br><small>candidate</small></span><span class="arrow">→</span><span class="token action">a₂ ?<br><small>target</small></span>
+          </div>
+        </div>
+        <div class="diagram-caption">The target item appears before its response. Causal attention can therefore condition the response prediction on both the history and the candidate.</div>
+      </div>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Retrieval</b>\[p(\Phi_{i+1}\mid \Phi_0,a_0,\ldots,\Phi_i,a_i)\]<p>Predict the next positively engaged content item.</p></div>
+        <div class="formula-card"><b>Ranking</b>\[p(a_{i+1}\mid \Phi_0,a_0,\ldots,\Phi_{i+1})\]<p>Insert a candidate and predict the response to it.</p></div>
+      </div>
+
+      <h2>Why training becomes generative</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>One causal pass supervises many positions</strong><span>Encoder work is reused</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  S["One user sequence<br/>x0 ... xN"] --> MASK["Causal HSTU pass"]
+  MASK --> P1["loss at event 1"]
+  MASK --> P2["loss at event 2"]
+  MASK --> PD["..."]
+  MASK --> PN["loss at event N"]
+  class S input; class MASK op; class P1,P2,PD,PN output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef op fill:#dcece5,stroke:#176b52,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Impression-level training can repeatedly encode overlapping prefixes. Causal generative training shares prefix computation and produces supervision at many valid output positions; the paper describes an (O(N)) reduction relative to its repeated-prefix setup.</figcaption>
+      </figure>
+
+      <h2>What happens to other feature types?</h2>
+      <div class="grid3">
+        <div class="card"><h3>Fast categorical events</h3><p>Items and actions naturally become the main token stream.</p></div>
+        <div class="card"><h3>Slow categorical state</h3><p>Demographics or followed creators are compressed into change points, then merged into the timeline.</p></div>
+        <div class="card"><h3>Dense aggregates</h3><p>The proposal removes many counters and asks target-aware sequence modeling to reconstruct their useful signal. This is an approximation, not an identity.</p></div>
+      </div>
+      <div class="callout red"><strong>Do not overstate the equivalence.</strong><p>A finite sequence does not literally contain every engineered feature. The paper argues that the unified sequence can approximate the full feature space as history length and model expressiveness grow.</p></div>
+    </div></section>
+
+    <section class="tab" id="block"><div class="page">
+      <div class="eyebrow">Step 2 · Learn the operator</div>
+      <h1>Inside one HSTU layer.</h1>
+      <p class="lede">One fused projection creates queries, keys, values, and a gate. Pointwise attention pools the history; LayerNorm controls scale; the gate and output projection transform the result.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Complete forward computation</strong><span>Residual is shown explicitly</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["X<br/>N x d"] --> F1["Linear + SiLU"]
+  F1 --> SPLIT["Split into<br/>U, V, Q, K"]
+  QK["Q K^T + relative<br/>position/time bias"] --> SILU["Pointwise SiLU"]
+  SPLIT --> QK
+  SPLIT --> AV["A V<br/>pool values"]
+  SILU --> AV
+  AV --> NORM["LayerNorm"]
+  SPLIT --> GATE["elementwise<br/>P * U"]
+  NORM --> GATE
+  GATE --> F2["Output linear"]
+  F2 --> ADD["Residual add"]
+  X --> ADD
+  ADD --> Y["X next<br/>N x d"]
+  class X input; class F1,F2 param; class SPLIT,QK,SILU,AV,GATE op; class NORM route; class ADD route; class Y output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dcece5,stroke:#176b52,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The paper’s Equation (3) defines the transformed output (Y(X)); HSTU layers are stacked with residual connections, so an implementation adds that transformed output back to the layer input.</figcaption>
+      </figure>
+
+      <h2>The three equations</h2>
+      <div class="derivation">
+        <h3>Forward pass for \(X\in\mathbb{R}^{N\times d}\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[U,V,Q,K=\operatorname{Split}(\operatorname{SiLU}(XW_1+b_1))\]</div><div class="step-explain"><strong>Pointwise projection.</strong>One fused linear map makes all four tensors. \(Q,K\) determine relevance, \(V\) carries content, and \(U\) is an input-dependent gate.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[A=\operatorname{SiLU}(QK^\top+R_{p,t}),\qquad P=AV\]</div><div class="step-explain"><strong>Spatial aggregation.</strong>Pairwise scores receive learned relative position/time bias. SiLU acts independently on each score—there is no row-wise softmax denominator.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[Y(X)=f_2\!\left(\operatorname{LN}(P)\odot U\right),\qquad X'=X+Y(X)\]</div><div class="step-explain"><strong>Gated transformation.</strong>LayerNorm stabilizes the unnormalized pool. The elementwise product lets the current token decide which pooled channels pass through.</div></div>
+      </div>
+
+      <div class="symbols">
+        <div class="symbol"><code>X: N × d</code>N sequence positions, width d.</div>
+        <div class="symbol"><code>Q,K: h × N × d_qk</code>Per-head queries and keys.</div>
+        <div class="symbol"><code>U,V: h × N × d_v</code>Per-head gates and values.</div>
+        <div class="symbol"><code>A: h × N × N</code>Causal attention weights.</div>
+        <div class="symbol"><code>R_p,t: 1 × N × N</code>Shared positional + temporal bias.</div>
+        <div class="symbol"><code>W₂: (h d_v) × d</code>Returns concatenated heads to width d.</div>
+      </div>
+
+      <h2>Why this can replace several DLRM modules</h2>
+      <div class="grid3">
+        <div class="concept"><h3>Extraction</h3><p>Attention pools relevant historical ID embeddings instead of fetching many pre-aggregated feature tables.</p></div>
+        <div class="concept"><h3>Interaction</h3><p>The dot product forms a target-history interaction; \(\operatorname{LN}(AV)\odot U\) directly crosses pooled context with the current token.</p></div>
+        <div class="concept"><h3>Transformation</h3><p>The input-dependent gate behaves like conditional routing across channels, replacing a separate wide feed-forward sublayer.</p></div>
+      </div>
+      <div class="plain-note"><strong>SwiGLU connection.</strong> Because SiLU is applied to \(U\), the product \(\operatorname{LN}(AV)\odot U\) resembles a SwiGLU-style gated transform. The important difference is that one branch is an attention-pooled historical representation.</div>
+    </div></section>
+
+    <section class="tab" id="attention"><div class="page">
+      <div class="eyebrow">Step 3 · Understand the key difference</div>
+      <h1>Pointwise attention keeps intensity.</h1>
+      <p class="lede">Softmax answers “how should one unit of attention be divided?” HSTU’s pointwise activation can also represent “how much matching evidence exists?”</p>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Transformer-style row normalization</b>\[a_{ij}^{\text{soft}}=\frac{e^{s_{ij}}}{\sum_k e^{s_{ik}}},\quad \sum_j a_{ij}^{\text{soft}}=1\]<p>Relative allocation is explicit; total mass is fixed.</p></div>
+        <div class="formula-card"><b>HSTU pointwise activation</b>\[a_{ij}^{\text{HSTU}}=\operatorname{SiLU}(s_{ij}),\quad s_{ij}=q_i^\top k_j+r_{ij}\]<p>Each edge is transformed independently; total mass can vary.</p></div>
+      </div>
+
+      <div class="interactive" data-attention-demo>
+        <div class="interactive-head"><strong>Compare the same four logits</strong><span>Illustrative scalar weights; the real model is multi-head and vector-valued.</span></div>
+        <div class="interactive-controls"><button class="demo-btn active" data-attention-mode="pointwise">Pointwise SiLU</button><button class="demo-btn" data-attention-mode="softmax">Softmax</button></div>
+        <div class="interactive-body"><div class="bar-list"></div><p class="plain-note" data-attention-note></p></div>
+      </div>
+
+      <h2>Why recommendation is unusual</h2>
+      <div class="grid2">
+        <div class="note"><h3>Strength and frequency can matter.</h3><p>Ten related long views can indicate stronger preference than one. Softmax must divide one unit of mass among them; pointwise weights can accumulate before normalization.</p></div>
+        <div class="note"><h3>The vocabulary keeps changing.</h3><p>New content and actions arrive in a streaming system. The paper reports that pointwise attention is better suited to its synthetic non-stationary-vocabulary setup.</p></div>
+        <div class="note"><h3>Time gaps are not token gaps.</h3><p>Relative bias includes both position and elapsed time, so two adjacent actions separated by a month need not look like two adjacent actions separated by seconds.</p></div>
+        <div class="note"><h3>LayerNorm becomes essential.</h3><p>Without a normalized attention simplex, pooled magnitude can drift with history and logits. The post-pooling LayerNorm controls this scale.</p></div>
+      </div>
+
+      <h2>What the mechanism does not guarantee</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Negative SiLU weights</b><span>For negative logits, SiLU is negative. The pool is a signed interaction, not a probability-weighted average.</span></div>
+        <div class="caveat"><b>No automatic noise robustness</b><span>Softmax’s competition can suppress weak edges. Pointwise aggregation may accumulate irrelevant signal if representations and masks are poor.</span></div>
+        <div class="caveat"><b>Still quadratic before sparsity</b><span>The full \(QK^\top\) interaction has \(N^2\) pair structure. Kernel fusion changes wall time and memory traffic, not the dense mathematical graph.</span></div>
+        <div class="caveat"><b>Attention is not explanation</b><span>A large weight is only one factor; values, gates, residuals, later layers, and task heads all affect the prediction.</span></div>
+      </div>
+
+      <div class="quiz"><h3>Check your intuition</h3><p>If the same relevant event is duplicated, which attention form can naturally increase pre-normalization pooled magnitude?</p><button data-answer="hstu-q-attn">Reveal answer</button><div class="answer" id="hstu-q-attn">Pointwise attention. Softmax renormalizes the row to sum to one, so duplication redistributes a fixed mass. HSTU applies SiLU edge by edge and can accumulate both copies, though LayerNorm later controls representation scale.</div></div>
+    </div></section>
+
+    <section class="tab" id="systems"><div class="page">
+      <div class="eyebrow">Step 4 · Make long histories affordable</div>
+      <h1>The architecture and the system are one design.</h1>
+      <p class="lede">HSTU’s quality story depends on long sequences. Its engineering story is therefore not optional: ragged kernels, stochastic length, memory reduction, embedding sharding, and candidate-cost amortization are part of the proposal.</p>
+
+      <h2>Four scaling levers</h2>
+      <div class="grid4">
+        <div class="concept"><h3>Ragged attention</h3><p>Operate on each user’s true history length instead of padding every sample to the maximum.</p></div>
+        <div class="concept"><h3>Stochastic Length</h3><p>Subsample very long, repetitive histories during training to reduce expected pair cost.</p></div>
+        <div class="concept"><h3>Fused activation path</h3><p>Fuse projection, nonlinearity, normalization, dropout, and output work to reduce stored intermediates.</p></div>
+        <div class="concept"><h3>M-FALCON</h3><p>Microbatch candidates so expensive history computation is shared during target-aware ranking.</p></div>
+      </div>
+
+      <h2>Stochastic Length in one equation</h2>
+      <div class="math"><span class="label">Paper’s asymptotic result</span>\[\text{dense attention cost } O(N^2d)\quad\longrightarrow\quad \text{expected SL cost }O(N^{\alpha}d),\qquad 1&lt;\alpha\le 2\]</div>
+      <p>For users below a length threshold, keep the full history. For longer users, sample a shorter subsequence with a probability chosen so the expected cost follows the desired exponent. Lower \(\alpha\) means more aggressive sparsification. It is a training-time approximation and must be validated for quality.</p>
+
+      <h2>Activation memory</h2>
+      <div class="grid2">
+        <div class="metric"><b>14d</b><small>HSTU intermediate activation states per layer in the paper’s bfloat16 accounting</small><p>Two external linear layers plus compact Q/K/U/V and gated outputs.</p></div>
+        <div class="metric"><b>33d</b><small>Transformer comparison under the paper’s standard width assumptions</small><p>Attention plus a conventional (4d) feed-forward block and associated intermediates.</p></div>
+      </div>
+      <div class="callout"><strong>These are model-accounting figures, not universal profiler outputs.</strong><p>Actual peak memory depends on recomputation, kernel implementation, tensor parallelism, allocator behavior, precision, and the exact Transformer baseline.</p></div>
+
+      <h2>Serving many candidate targets</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>M-FALCON cost amortization</strong><span>Shared history, microbatched targets</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  H["Encode user history once"] --> CACHE["Reusable HSTU states"]
+  C1["candidate microbatch 1"] --> TA1["target-aware attention"]
+  C2["candidate microbatch 2"] --> TA2["target-aware attention"]
+  C3["candidate microbatch ..."] --> TA3["target-aware attention"]
+  CACHE --> TA1
+  CACHE --> TA2
+  CACHE --> TA3
+  TA1 --> S["candidate scores"]
+  TA2 --> S
+  TA3 --> S
+  class H,C1,C2,C3 input; class CACHE param; class TA1,TA2,TA3 op; class S output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dcece5,stroke:#176b52,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The paper reports serving a model described as 285× more complex than its DLRM source while attaining higher QPS in tested configurations. This is a system-specific result, not a claim that arbitrary 285× models are cheaper.</figcaption>
+      </figure>
+
+      <h2>Embedding scale is its own bottleneck</h2>
+      <p>With a 10-billion-entry vocabulary and 512-dimensional embeddings, the paper estimates roughly 60 TB for fp32 embeddings plus Adam states. It uses row-wise AdamW and places optimizer state in DRAM to reduce HBM pressure. HSTU does not make the embedding table disappear; the system shards and manages it.</p>
+    </div></section>
+
+    <section class="tab" id="worked"><div class="page">
+      <div class="eyebrow">Concrete pass · Four historical events</div>
+      <h1>Follow one candidate through the block.</h1>
+      <p class="lede">This scalar-head example strips away dimensions so every operation is visible. It illustrates the operator; it is not a reproduction of a trained HSTU.</p>
+
+      <h2>Setup</h2>
+      <div class="table-wrap"><table><thead><tr><th>History token</th><th>Action</th><th>Score \(s_j=q^\top k_j+r_j\)</th><th>Value \(v_j\)</th></tr></thead><tbody>
+        <tr><td>sports clip A</td><td>skip</td><td>0.5</td><td>0.2</td></tr>
+        <tr><td>sports clip B</td><td>click</td><td>1.2</td><td>0.5</td></tr>
+        <tr><td>sports clip C</td><td>long view</td><td>2.0</td><td>1.0</td></tr>
+        <tr><td>sports clip D</td><td>share</td><td>0.8</td><td>0.7</td></tr>
+      </tbody></table></div>
+
+      <div class="derivation">
+        <h3>One query, one scalar channel</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[a_j=\operatorname{SiLU}(s_j)\approx[0.311,0.922,1.762,0.552]\]</div><div class="step-explain"><strong>Activate each edge independently.</strong>The long-view event receives the strongest positive interaction, but the other events keep their own absolute mass.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[p=\sum_j a_jv_j\approx 0.311(0.2)+0.922(0.5)+1.762(1)+0.552(0.7)=2.67\]</div><div class="step-explain"><strong>Pool values.</strong>The result is a signed weighted sum, not a convex average. In the real layer this occurs per head and channel.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[z=\operatorname{LN}(p)\odot u,\qquad y=W_2z+b_2,\qquad x'=x+y\]</div><div class="step-explain"><strong>Normalize, gate, project, add.</strong>A scalar cannot meaningfully demonstrate LayerNorm, so this last step must be understood vector-wise: channels are standardized, selectively gated by \(U\), and returned to width \(d\).</div></div>
+      </div>
+
+      <h2>Where time enters</h2>
+      <p>If clip C happened 90 days ago while clip B happened 10 seconds ago, the learned temporal bucket bias can lower C’s effective score even if their content dot product is similar:</p>
+      <div class="math"><span class="label">Relative position + time</span>\[s_{ij}=q_i^\top k_j+r_{\text{position}(i-j),\,\text{time}(t_i-t_j)}\]</div>
+
+      <h2>Shape trace for a realistic miniature</h2>
+      <div class="table-wrap"><table><thead><tr><th>Tensor</th><th>Example shape</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>(X)</td><td><code>[batch=32, N=256, d=128]</code></td><td>Token embeddings for 32 user histories.</td></tr>
+        <tr><td>(Q,K)</td><td><code>[32, h=4, 256, d_qk=32]</code></td><td>Pairwise matching coordinates.</td></tr>
+        <tr><td>(U,V)</td><td><code>[32, 4, 256, d_v=32]</code></td><td>Gate and value channels.</td></tr>
+        <tr><td>(A)</td><td><code>[32, 4, 256, 256]</code></td><td>Causal score matrix; a ragged kernel avoids padded work.</td></tr>
+        <tr><td>(AV)</td><td><code>[32, 4, 256, 32]</code></td><td>History pooled per query and head.</td></tr>
+        <tr><td>(X')</td><td><code>[32, 256, 128]</code></td><td>Residual output ready for the next HSTU layer.</td></tr>
+      </tbody></table></div>
+
+      <div class="quiz"><h3>Implementation trap</h3><p>Can you replace pointwise SiLU with softmax and still call the operator unchanged HSTU?</p><button data-answer="hstu-q-worked">Reveal answer</button><div class="answer" id="hstu-q-worked">No. It remains an attention model and may be a useful ablation, but it removes HSTU’s pointwise aggregated attention—the mechanism intended to retain preference intensity. The paper reports this replacement as an ablated HSTU.</div></div>
+    </div></section>
+
+    <section class="tab" id="evidence"><div class="page">
+      <div class="eyebrow">Read claims with the right denominator</div>
+      <h1>What the paper shows—and what it does not.</h1>
+      <p class="lede">HSTU combines public benchmark results, controlled encoder comparisons, and proprietary production experiments. Their evidentiary scopes are different.</p>
+
+      <h2>Reported results</h2>
+      <div class="grid3">
+        <div class="metric"><b>up to 65.8%</b><small>NDCG improvement</small><p>Reported on the Amazon Books public sequential recommendation setup versus the listed baseline.</p></div>
+        <div class="metric"><b>5.3×–15.2×</b><small>encoder speedup</small><p>Reported against FlashAttention2-based Transformers at sequence length 8192 in tested training/inference settings.</p></div>
+        <div class="metric"><b>12.4%</b><small>production metric improvement</small><p>Aggregate paper claim across deployed HSTU-based Generative Recommenders on a large platform.</p></div>
+      </div>
+
+      <h2>Scaling claim</h2>
+      <div class="math"><span class="label">Empirical fit, retrieval example</span>\[\text{HitRate@100}\approx 0.15+0.0195\ln C\]</div>
+      <p>The paper reports power-law-like metric trends with training compute across roughly three orders of magnitude, up to configurations with 8192-token histories, width 1024, 24 HSTU layers, and 1.5-trillion-parameter models. It also reports DLRM quality flattening earlier in the tested internal regime.</p>
+      <div class="callout red"><strong>A fitted trend is not an architectural theorem.</strong><p>The curve depends on one company’s data distribution, objectives, model allocation, optimizer, streaming setup, and compute range. It does not prove every HSTU deployment will scale, nor that sequence length alone causes the gain.</p></div>
+
+      <h2>Close comparisons</h2>
+      <div class="table-wrap"><table><thead><tr><th>Question</th><th>Transformer</th><th>HSTU</th><th>Why it matters</th></tr></thead><tbody>
+        <tr><td>Attention normalization</td><td>Softmax across keys</td><td>Pointwise SiLU</td><td>HSTU can preserve absolute interaction intensity.</td></tr>
+        <tr><td>Position signal</td><td>Often position only</td><td>Relative position + elapsed time</td><td>Irregular event timing is first-class.</td></tr>
+        <tr><td>Post-attention transform</td><td>Separate FFN, often \(4d\)</td><td>\(\operatorname{LN}(AV)\odot U\) + linear</td><td>Fewer activations and explicit gating.</td></tr>
+        <tr><td>Data layout</td><td>Frequently padded batches</td><td>Fully ragged attention kernel</td><td>Skewed user-history lengths waste less work.</td></tr>
+        <tr><td>Main target domain</td><td>General sequence modeling</td><td>High-cardinality streaming recommendation</td><td>The inductive and systems choices are domain-specific.</td></tr>
+      </tbody></table></div>
+
+      <h2>Open risks</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Replication gap</b><span>The largest scaling and online results use private data and infrastructure.</span></div>
+        <div class="caveat"><b>History bias</b><span>A behavior-only model can reinforce exposure and popularity feedback loops.</span></div>
+        <div class="caveat"><b>Fresh-item representation</b><span>Atomic IDs are powerful for collaboration but weak before enough interactions accrue.</span></div>
+        <div class="caveat"><b>Serving complexity</b><span>Embedding sharding, ragged kernels, and M-FALCON require substantial systems investment.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>Reconstruct HSTU in eight steps.</h1>
+      <p class="lede">If you can explain each row without opening the earlier tabs, you understand the paper’s main technical arc.</p>
+
+      <div class="table-wrap"><table><thead><tr><th>Step</th><th>Memory hook</th><th>Precise statement</th></tr></thead><tbody>
+        <tr><td>Representation</td><td>Actions are tokens</td><td>Sequentialize high-cardinality behavior and slow categorical state into a unified chronology.</td></tr>
+        <tr><td>Retrieval</td><td>Generate the next content</td><td>Model \(p(\Phi_{i+1}\mid\text{history})\).</td></tr>
+        <tr><td>Ranking</td><td>Insert candidate, predict response</td><td>Model \(p(a_{i+1}\mid\text{history},\Phi_{i+1})\).</td></tr>
+        <tr><td>Projection</td><td>One map makes U,V,Q,K</td><td>Use a fused linear + SiLU projection and split into gate/value/query/key tensors.</td></tr>
+        <tr><td>Aggregation</td><td>No softmax budget</td><td>\(A=\operatorname{SiLU}(QK^\top+R_{p,t})\), then pool \(AV\).</td></tr>
+        <tr><td>Transformation</td><td>Normalize, gate, return</td><td>\(Y=f_2(\operatorname{LN}(AV)\odot U)\), followed by the residual path.</td></tr>
+        <tr><td>Training</td><td>Share prefixes, sparsify length</td><td>Generative supervision reuses causal encoding; Stochastic Length lowers expected long-history cost.</td></tr>
+        <tr><td>Serving</td><td>Share history across targets</td><td>M-FALCON microbatches candidate-aware work while reusing history states.</td></tr>
+      </tbody></table></div>
+
+      <h2>Interview drill</h2>
+      <div class="grid2">
+        <div class="note"><h3>Why remove softmax?</h3><p>To retain absolute evidence intensity and improve behavior under a large, non-stationary vocabulary; LayerNorm then stabilizes pooled scale.</p></div>
+        <div class="note"><h3>Why is \(U\) needed?</h3><p>It gates the normalized history pool using the current token’s projected channels, creating a conditional feature interaction and replacing a large FFN path.</p></div>
+        <div class="note"><h3>Where is target awareness?</h3><p>For ranking, the candidate is inserted before the action target, so its query can attend causally to the whole prior behavior history.</p></div>
+        <div class="note"><h3>What remains quadratic?</h3><p>The pairwise attention graph in sequence length. Ragged kernels and Stochastic Length reduce realized work but do not turn dense attention into a linear operator.</p></div>
+        <div class="note"><h3>HSTU vs GR?</h3><p>GR is the recommendation formulation and training paradigm; HSTU is its specialized sequential encoder architecture.</p></div>
+        <div class="note"><h3>Biggest caveat?</h3><p>The strongest scaling and production evidence is proprietary and system-dependent, so transfer must be re-measured.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Five-question self-test</h3><p>1. Write the three HSTU sublayer equations.<br>2. Explain why pointwise weights need LayerNorm.<br>3. Distinguish ranking from retrieval token targets.<br>4. Name two training/serving optimizations.<br>5. State one reason the 1.5T result may not transfer.</p><button data-answer="hstu-final">Reveal compact answers</button><div class="answer" id="hstu-final">1. Fused U/V/Q/K projection; pointwise \(A=\mathrm{SiLU}(QK^\top+R)\), \(P=AV\); gated \(Y=f_2(\mathrm{LN}(P)\odot U)\) plus residual. 2. Pointwise mass is not constrained and varies with scores/history. 3. Retrieval predicts content; ranking predicts response after inserting a candidate. 4. Any two of ragged fused attention, Stochastic Length, reduced activations, row-wise optimizer/DRAM state, M-FALCON. 5. Private data, objectives, infrastructure, scale allocation, or compute regime.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room</div>
+      <h1>Primary paper and implementation trail.</h1>
+      <p class="lede">Use the guide for structure, then return to the primary paper for exact experimental protocol, notation, and system assumptions.</p>
+
+      <h2>Primary source</h2>
+      <div class="paper"><div><strong>Actions Speak Louder than Words: Trillion-Parameter Sequential Transducers for Generative Recommendations</strong>Jiaqi Zhai et al. · ICML 2024 · arXiv v3, May 2024</div><div class="paper-links"><a href="papers/HSTU.pdf">Local PDF</a><a href="https://arxiv.org/abs/2402.17152">arXiv</a></div></div>
+
+      <h2>Suggested paper path</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · Sections 2.1–2.3</b><strong>Reformulation</strong><p>Track how categorical, slow-changing, and numerical features are treated; then derive ranking and retrieval targets.</p></div>
+        <div class="event"><b>2 · Sections 3–3.3</b><strong>HSTU operator</strong><p>Read Equations 1–3, pointwise attention, Stochastic Length, and activation accounting together.</p></div>
+        <div class="event"><b>3 · Section 3.4</b><strong>M-FALCON</strong><p>Separate model FLOPs from candidate-serving wall time and understand what work is amortized.</p></div>
+        <div class="event"><b>4 · Section 4</b><strong>Evidence</strong><p>Keep public benchmarks, encoder microbenchmarks, internal offline results, and online A/B tests in separate evidence buckets.</p></div>
+      </div>
+
+      <h2>Useful implementation reference</h2>
+      <div class="grid2">
+        <div class="note"><h3>Meta Generative Recommenders</h3><p>The authors’ open-source repository includes HSTU components and generative-recommendation examples. Match code paths to the paper before assuming exact production parity.</p><a href="https://github.com/facebookresearch/generative-recommenders">Open repository</a></div>
+        <div class="note"><h3>Feature Interactions companion</h3><p>Use the original field guide to contrast HSTU’s target-history interaction with FM, DCN, AutoInt, DHEN, and Wukong operators.</p><a href="../ML%20-%20Feature%20Interactions/#autoint">Open companion</a></div>
+      </div>
+
+      <div class="callout"><strong>Accuracy note</strong><p>Equations and numerical claims here were checked against the downloaded v3 paper. Worked scalar values are original teaching examples and are labeled as illustrative.</p></div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+</body>
+</html>

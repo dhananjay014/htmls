@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and mathematical guide to OneRec, session-wise generative recommendation, sparse MoE, and iterative preference alignment.">
+  <title>OneRec · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body data-guide-title="OneRec" style="--accent:#24617a;--accent-dark:#173f50;--accent-soft:#dcebf1">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">1R</span><span>OneRec</span></div>
+      <p>Unify retrieve and rank by generating an aligned recommendation session end to end.</p>
+    </div>
+    <div class="nav-label">Build the idea</div>
+    <button class="tab-btn active" data-tab="overview"><span class="num">00</span>Start here</button>
+    <button class="tab-btn" data-tab="unify"><span class="num">01</span>Cascade → one model</button>
+    <button class="tab-btn" data-tab="tokens"><span class="num">02</span>Balanced item tokens</button>
+    <button class="tab-btn" data-tab="session"><span class="num">03</span>Session generation</button>
+    <button class="tab-btn" data-tab="moe"><span class="num">04</span>Sparse MoE decoder</button>
+    <div class="nav-label">Align &amp; deploy</div>
+    <button class="tab-btn" data-tab="ipa"><span class="num">05</span>Reward model &amp; IPA</button>
+    <button class="tab-btn" data-tab="worked"><span class="num">06</span>Worked example</button>
+    <button class="tab-btn" data-tab="evidence"><span class="num">07</span>Deployment &amp; evidence</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">08</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">09</span>Paper &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20Semantic%20IDs/">Semantic IDs</a><a href="../RL%20-%20PPO%20and%20GRPO/">PPO &amp; GRPO</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">OneRec / Start here</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/OneRec.pdf">PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Industrial generative recommendation · 2025</div>
+      <h1>Generate the whole slate, then align it to preference.</h1>
+      <p class="lede">OneRec replaces a retrieve–pre-rank–rank cascade with one encoder-decoder model that emits a short video session. Sparse experts scale capacity; a reward model turns self-generated sessions into DPO preference pairs.</p>
+      <div class="meta-row"><span class="chip primary">single-stage generation</span><span class="chip">balanced semantic IDs</span><span class="chip">session-wise objective</span><span class="chip">top-2 MoE</span><span class="chip">iterative preference alignment</span></div>
+
+      <h2>The complete system</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>One model path from history to display list</strong><span>Read left to right</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  LOG["positive user history<br/>views, likes, shares"] --> TOK["balanced multi-level<br/>semantic IDs"]
+  TOK --> ENC["Transformer<br/>history encoder"]
+  ENC --> DEC["autoregressive decoder<br/>sparse MoE FFNs"]
+  DEC --> SESSION["generated session<br/>5 video IDs"]
+  SESSION --> RM["personalized<br/>session reward model"]
+  RM --> PAIR["best vs worst<br/>preference pair"]
+  PAIR --> DPO["NTP + DPO<br/>iterative update"]
+  DPO --> DEC
+  SESSION --> SERVE["online display"]
+  class LOG input; class TOK op; class ENC,DEC,RM param; class PAIR,DPO route; class SESSION,SERVE output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dcebf1,stroke:#24617a,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Next-token prediction first trains a seed generator. Iterative Preference Alignment (IPA) then samples from the current model, scores sessions, and trains the next snapshot to prefer the better one.</figcaption>
+      </figure>
+
+      <div class="grid4">
+        <div class="concept"><h3>Unify</h3><p>Remove handoffs whose recall errors permanently cap downstream rankers.</p></div>
+        <div class="concept"><h3>Generate lists</h3><p>Model dependencies among displayed items instead of predicting each independently.</p></div>
+        <div class="concept"><h3>Scale sparsely</h3><p>Use many decoder FFN experts while activating only a small top-k per token.</p></div>
+        <div class="concept"><h3>Align iteratively</h3><p>Mine personalized winner/loser sessions from the model’s own current outputs.</p></div>
+      </div>
+
+      <h2>Three levels of optimization</h2>
+      <div class="grid3">
+        <div class="note"><h3>Item level</h3><p>Balanced residual k-means creates compact, hierarchical video tokens with less code-distribution skew.</p></div>
+        <div class="note"><h3>Session level</h3><p>The decoder predicts a coherent set of 5–10 videos, conditioning every later item on earlier generated choices.</p></div>
+        <div class="note"><h3>Preference level</h3><p>A personalized reward model scores watch-time and interaction objectives, creating hard preference pairs for DPO.</p></div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>Balanced codes name videos → one model generates a session → a reward model chooses the better session → DPO teaches the next model snapshot.</p></div>
+      <div class="paper"><div><strong>OneRec: Unifying Retrieve and Rank with Generative Recommender and Iterative Preference Alignment</strong>Deng et al., 2025</div><div class="paper-links"><a href="papers/OneRec.pdf">Local PDF</a><a href="https://arxiv.org/abs/2502.18965">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="unify"><div class="page">
+      <div class="eyebrow">Step 1 · Remove the cascade boundary</div>
+      <h1>A ranker cannot recover what retrieval discarded.</h1>
+      <p class="lede">Traditional recommenders reduce a vast catalog through several locally trained stages. OneRec treats the final displayed list as the direct output of a single generative policy.</p>
+
+      <h2>Cascade architecture</h2>
+      <div class="pipeline">
+        <div class="stage"><strong>~10¹⁰ videos</strong><small>full corpus</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>~10⁵ candidates</strong><small>retrieval</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>~10³ candidates</strong><small>coarse ranking</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>~10² candidates</strong><small>fine ranking</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>dozens</strong><small>display list</small></div>
+      </div>
+
+      <div class="math"><span class="label">Recall ceiling propagates</span>\[\text{relevant item }i\notin C_{retrieval}\quad\Longrightarrow\quad i\notin C_{prerank}\quad\Longrightarrow\quad i\notin C_{rank}\]</div>
+      <p>Even a perfect final ranker cannot select an item removed earlier. Each stage is also usually trained with its own surrogate objective, candidate distribution, and features, creating mismatch.</p>
+
+      <h2>OneRec architecture</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Catalog address space becomes the decoder vocabulary</strong><span>No intermediate candidate list</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  C["video corpus<br/>precomputed semantic IDs"] --> TRIE["valid code-prefix<br/>structure"]
+  H["user history IDs"] --> M["OneRec encoder-decoder"]
+  TRIE --> M
+  M --> V1["video 1"] --> V2["video 2"] --> VD["..."] --> VM["video m"]
+  class C,H input; class TRIE op; class M param; class V1,V2,VD,VM output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dcebf1,stroke:#24617a,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>“Single stage” refers to model selection: one autoregressive model directly generates the recommended list. The system still needs offline item tokenization, constrained decoding, reward modeling, and serving infrastructure.</figcaption>
+      </figure>
+
+      <h2>What is gained—and what changes</h2>
+      <div class="procon">
+        <div class="pros"><h3>Potential gains</h3><ul><li>End-to-end objective on final session outputs.</li><li>No stage-wise candidate ceiling.</li><li>Direct modeling of list context and diversity.</li><li>Capacity can scale through sparse decoder experts.</li></ul></div>
+        <div class="cons"><h3>New burdens</h3><ul><li>Autoregressive latency and beam search.</li><li>Harder control over invalid, duplicate, or unsafe outputs.</li><li>Reward model quality becomes central.</li><li>Catalog updates require consistent tokenization and serving constraints.</li></ul></div>
+      </div>
+
+      <div class="callout red"><strong>Unified does not mean objective-free.</strong><p>The model still optimizes next-token likelihood and learned preference rewards. If those targets omit business constraints or user welfare, end-to-end training can optimize the wrong thing more efficiently.</p></div>
+    </div></section>
+
+    <section class="tab" id="tokens"><div class="page">
+      <div class="eyebrow">Step 2 · Name ten billion videos compactly</div>
+      <h1>Balanced residual codes prevent an hourglass.</h1>
+      <p class="lede">OneRec starts from multimodal video embeddings aligned to behavior data, then applies residual k-means level by level. Unlike ordinary nearest-centroid assignment, each cluster is forced to receive the same number of items.</p>
+
+      <h2>Residual code recursion</h2>
+      <div class="derivation">
+        <h3>For video embedding \(e_i\in\mathbb{R}^d\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[r_i^{1}=e_i\]</div><div class="step-explain"><strong>Start with the full embedding.</strong>The embedding is multimodal and behavior-aligned before quantization.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[s_i^{\ell}=\arg\min_k\|r_i^{\ell}-c_k^{\ell}\|_2^2\]</div><div class="step-explain"><strong>Pick a centroid index.</strong>This integer is level \(\ell\)’s semantic token.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[r_i^{\ell+1}=r_i^{\ell}-c_{s_i^{\ell}}^{\ell}\]</div><div class="step-explain"><strong>Quantize the remaining error.</strong>Later levels refine what earlier levels missed.</div></div>
+        <div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[\operatorname{SID}(v_i)=(s_i^1,s_i^2,\ldots,s_i^L)\]</div><div class="step-explain"><strong>Use the tuple as the video address.</strong>The paper’s deployment uses \(L=3\) codebook levels.</div></div>
+      </div>
+
+      <h2>What “balanced k-means” adds</h2>
+      <div class="math"><span class="label">Equal-capacity assignment</span>\[w=\frac{|V|}{K},\qquad |V_k|=w\ \text{ for every cluster }k\]</div>
+      <p>At each iteration, each centroid takes its \(w\) nearest currently unassigned items, then updates to their mean. This prevents a few popular centroids from absorbing most videos while other codes remain almost unused.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Ordinary vs balanced first-level partition</strong><span>Illustrative item counts</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart TB
+  V["1000 video embeddings"] --> O["ordinary k-means"]
+  V --> B["balanced k-means"]
+  O --> O1["cluster A: 610"]
+  O --> O2["cluster B: 260"]
+  O --> O3["cluster C: 130"]
+  B --> B1["cluster A: 334"]
+  B --> B2["cluster B: 333"]
+  B --> B3["cluster C: 333"]
+  class V input; class O,B op; class O1,O2,O3 risk; class B1,B2,B3 output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef op fill:#dcebf1,stroke:#24617a,stroke-width:2px;
+  classDef risk fill:#f4e2df,stroke:#a23f35,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Counts are pedagogical. The paper’s balanced assignment makes each level’s token distribution easier for the generator to learn and avoids upper-level bottlenecks propagating through the hierarchy.</figcaption>
+      </figure>
+
+      <h2>Production configuration in the paper</h2>
+      <div class="grid3">
+        <div class="metric"><b>8192</b><small>clusters per codebook</small><p>Each token position chooses among a large but manageable vocabulary.</p></div>
+        <div class="metric"><b>3</b><small>codebook levels</small><p>One video is represented by three hierarchical tokens.</p></div>
+        <div class="metric"><b>8192³</b><small>raw tuple capacity</small><p>Theoretical address space is far larger than the actual catalog; valid decoding must stay on used tuples.</p></div>
+      </div>
+
+      <div class="callout blue"><strong>Relationship to RQ-VAE</strong><p>Both methods subtract selected code vectors level by level. OneRec replaces the learned RQ-VAE tokenizer used by TIGER with balanced residual k-means over its behavior-aligned multimodal embeddings.</p></div>
+    </div></section>
+
+    <section class="tab" id="session"><div class="page">
+      <div class="eyebrow">Step 3 · Predict a list, not isolated points</div>
+      <h1>Later recommendations see earlier choices.</h1>
+      <p class="lede">A session is the batch of videos returned for one request—typically 5 to 10. OneRec autoregressively generates that entire list, so coherence and diversity become modelable dependencies.</p>
+
+      <h2>Point-wise vs session-wise</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Independent next-item scoring</b>\[p(v_j\mid H_u)\quad\text{for each }j\]<p>A hand-built policy must combine individually good items into one slate.</p></div>
+        <div class="formula-card"><b>Session-wise generation</b>\[p(S\mid H_u)=\prod_{j=1}^{m}p(v_j\mid H_u,v_{\lt j})\]<p>Each choice conditions on what is already in the session.</p></div>
+      </div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Encoder-decoder sequence layout</strong><span>Each video expands to L semantic tokens</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  H["history<br/>v(h1) ... v(h256)"] --> E["Transformer encoder"]
+  E --> D["cross-attentive decoder"]
+  B1["BOS"] --> D
+  D --> A1["video 1<br/>s11 s12 s13"] --> B2["BOS"] --> A2["video 2<br/>s21 s22 s23"] --> BD["..."] --> AM["video 5"]
+  class H,B1 input; class E,D param; class A1,B2,A2,BD op; class AM output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dcebf1,stroke:#24617a,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>A BOS boundary marks each new item. Within one item, the decoder generates its \(L\) semantic code levels; across items, causal context carries the generated session so far.</figcaption>
+      </figure>
+
+      <h2>Training data: what counts as a good session?</h2>
+      <p>The paper extracts sessions from logged requests and keeps high-quality ones using engagement conditions. Examples include at least five actually watched videos, sufficient cumulative watch duration, or interactions such as likes, collections, or shares.</p>
+      <div class="callout red"><strong>This is selective imitation.</strong><p>Next-token training learns from sessions already filtered as high value. It does not directly discover a globally optimal slate; it imitates the distribution created by the existing system and the filtering policy.</p></div>
+
+      <h2>Next-token objective</h2>
+      <div class="math"><span class="label">Flattened session tokens</span>\[\bar S=[BOS,s_1^1,\ldots,s_1^L,BOS,s_2^1,\ldots,s_2^L,\ldots,BOS,s_m^1,\ldots,s_m^L]\]</div>
+      <div class="math"><span class="label">Teacher-forced likelihood</span>\[\mathcal L_{NTP}=-\sum_{t=1}^{m(L+1)}\log p_\theta(\bar S_{t+1}\mid H_u,\bar S_{\le t})\]</div>
+
+      <h2>What list context can learn</h2>
+      <div class="grid3">
+        <div class="concept"><h3>Coherence</h3><p>After a cooking clip, another related clip may fit a session better than an unrelated high-score item.</p></div>
+        <div class="concept"><h3>Diversity</h3><p>After two near-duplicate sports clips, probability can shift toward a complementary topic.</p></div>
+        <div class="concept"><h3>Ordering</h3><p>A broad-interest item can precede a niche follow-up; order can affect whether the user reaches later videos.</p></div>
+      </div>
+
+      <div class="caveats">
+        <div class="caveat"><b>Exposure confounding</b><span>Logged “good sessions” reflect what the old recommender chose to show.</span></div>
+        <div class="caveat"><b>Error propagation</b><span>An early decoding mistake becomes context for every later session item.</span></div>
+        <div class="caveat"><b>Duplicate control</b><span>Autoregressive likelihood alone does not guarantee unique items; decoding constraints may be needed.</span></div>
+        <div class="caveat"><b>Latency</b><span>Generating (mL) tokens with beam search is more sequential than scoring a fixed candidate matrix.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="moe"><div class="page">
+      <div class="eyebrow">Step 4 · Add capacity without dense FLOPs</div>
+      <h1>Every token chooses two of twenty-four experts.</h1>
+      <p class="lede">OneRec replaces decoder feed-forward sublayers with sparse Mixture-of-Experts layers. All experts are parameters; only the top-(K) gate choices execute for a token.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>One sparse decoder FFN layer</strong><span>Token-level routing</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  H["token state h_t^l"] --> G["router softmax<br/>24 scores"]
+  G --> TOP["Top-2 selection"]
+  H --> E4["expert 4 FFN"]
+  H --> E17["expert 17 FFN"]
+  TOP --> E4
+  TOP --> E17
+  E4 --> SUM["weighted sum"]
+  E17 --> SUM
+  H --> RES["residual add"]
+  SUM --> RES
+  RES --> OUT["h_t^(l+1)"]
+  class H input; class G,E4,E17 param; class TOP route; class SUM,RES op; class OUT output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#dcebf1,stroke:#24617a,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>This is a conventional sparse Transformer MoE, distinct from the separately trained multimodal MMoE guide. Routing happens for every decoder token inside the network.</figcaption>
+      </figure>
+
+      <h2>Routing and layer equations</h2>
+      <div class="derivation">
+        <h3>For \(N_E\) experts and top-\(K_E\) routing</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[s_{i,t}=\operatorname{softmax}_i\!\left((h_t^\ell)^\top e_i^\ell\right)\]</div><div class="step-explain"><strong>Score expert affinity.</strong>Each expert has a learned router vector \(e_i^\ell\).</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[g_{i,t}=\begin{cases}s_{i,t},&i\in\operatorname{TopK}(s_{\cdot,t},K_E)\\0,&\text{otherwise}\end{cases}\]</div><div class="step-explain"><strong>Sparsify the gate.</strong>Only selected experts receive this token and consume FFN compute.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[h_t^{\ell+1}=h_t^\ell+\sum_{i=1}^{N_E}g_{i,t}\operatorname{FFN}_i(h_t^\ell)\]</div><div class="step-explain"><strong>Combine active experts.</strong>Inactive experts add parameters but no token-level FFN FLOPs for this pass.</div></div>
+      </div>
+
+      <h2>Paper configuration</h2>
+      <div class="grid3">
+        <div class="metric"><b>24</b><small>total experts per MoE layer</small><p>Capacity lives across many specialist FFNs.</p></div>
+        <div class="metric"><b>2</b><small>active experts per token</small><p>Top-2 routing bounds the dominant FFN computation.</p></div>
+        <div class="metric"><b>13%</b><small>parameters active at inference</small><p>Reported for the deployed model; attention and shared components remain dense.</p></div>
+      </div>
+
+      <h2>Why more parameters can help</h2>
+      <div class="grid2">
+        <div class="concept"><h3>Conditional specialization</h3><p>Tokens for different content clusters, users, or semantic-code levels can learn to route to different FFN subspaces.</p></div>
+        <div class="concept"><h3>Capacity/FLOP decoupling</h3><p>Total parameters grow with \(N_E\), while per-token expert FLOPs grow mainly with \(K_E\), assuming balanced routing and efficient dispatch.</p></div>
+      </div>
+
+      <div class="caveats">
+        <div class="caveat"><b>Load imbalance</b><span>Popular experts can overflow capacity while others remain undertrained.</span></div>
+        <div class="caveat"><b>Communication</b><span>Dispatching tokens across devices can dominate nominal FFN arithmetic.</span></div>
+        <div class="caveat"><b>Router collapse</b><span>Without balancing losses or capacity controls, many tokens may select the same experts.</span></div>
+        <div class="caveat"><b>Memory remains</b><span>Inactive experts still occupy parameter storage and must be sharded or loaded.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="ipa"><div class="page">
+      <div class="eyebrow">Step 5 · Align generated sessions</div>
+      <h1>The model creates its own hard negatives.</h1>
+      <p class="lede">Recommendation logs rarely contain two sessions shown to the same user at the same moment. OneRec trains a reward model, samples many current-model sessions, and uses the highest- and lowest-scoring outputs as a personalized preference pair.</p>
+
+      <h2>Personalized session reward model</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Score a user-session pair</strong><span>Four outcome towers</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  U["user history u"] --> TA["target-aware<br/>item-user features"]
+  S["session v1 ... vm"] --> TA
+  TA --> SELF["self-attention across<br/>session items"]
+  SELF --> POOL["sum pooled session"]
+  POOL --> SWT["session watch-time tower"]
+  POOL --> VTR["view-rate tower"]
+  POOL --> WTR["follow-rate tower"]
+  POOL --> LTR["like-rate tower"]
+  class U,S input; class TA,SELF,POOL op; class SWT,VTR,WTR,LTR output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef op fill:#dcebf1,stroke:#24617a,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The reward model is trained on abundant logged recommendation outcomes with binary cross-entropy per target. A scalar preference score used for sampling must reflect the selected objective/combination.</figcaption>
+      </figure>
+
+      <h2>Iterative Preference Alignment loop</h2>
+      <div class="derivation">
+        <h3>Build the next model \(M_{t+1}\) from current model \(M_t\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[S_u^n\sim M_t(H_u),\qquad n=1,\ldots,N\]</div><div class="step-explain"><strong>Explore current behavior.</strong>The paper uses beam search to generate \(N=128\) candidate sessions for sampled users.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[r_u^n=R(u,S_u^n),\quad S_u^w=\arg\max_n r_u^n,\quad S_u^l=\arg\min_n r_u^n\]</div><div class="step-explain"><strong>Mine self-hard preferences.</strong>The winner and loser are personalized and lie on the current model’s output distribution.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\mathcal L_{DPO}=-\log\sigma\!\left(\beta\log\frac{M_{t+1}(S^w\mid H)}{M_t(S^w\mid H)}-\beta\log\frac{M_{t+1}(S^l\mid H)}{M_t(S^l\mid H)}\right)\]</div><div class="step-explain"><strong>Increase winner-relative likelihood.</strong>The previous snapshot \(M_t\) serves as the DPO reference policy.</div></div>
+        <div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[\mathcal L=\mathcal L_{NTP}+\lambda\mathcal L_{DPO}\]</div><div class="step-explain"><strong>Keep language-model grounding.</strong>NTP anchors the generator to high-quality sessions while DPO shifts preference between sampled alternatives.</div></div>
+      </div>
+
+      <h2>Why only 1% DPO sampling?</h2>
+      <p>Beam-generating 128 sessions and scoring each is expensive. The paper applies DPO sampling to only \(r_{DPO}=1\%\) of examples; its ablation reports marginal gains from increasing to 5% despite roughly linear sampling-resource growth.</p>
+
+      <div class="callout red"><strong>The reward model becomes the optimization target.</strong><p>If it misranks sessions, IPA confidently amplifies those errors. Self-generated pairs reduce off-policy mismatch but do not make the reward unbiased or immune to reward hacking.</p></div>
+
+      <h2>IPA, PPO, and GRPO are different</h2>
+      <div class="table-wrap"><table><thead><tr><th>Method</th><th>Training signal</th><th>Needs rollouts during update?</th><th>Value model?</th><th>OneRec role</th></tr></thead><tbody>
+        <tr><td>DPO / IPA</td><td>Winner–loser sequence pair</td><td>IPA mines pairs from current model, then uses supervised preference loss</td><td>No</td><td>Used by OneRec</td></tr>
+        <tr><td>PPO</td><td>Reward-weighted policy gradient with clipped ratios</td><td>Yes</td><td>Usually yes</td><td>Not the paper’s alignment algorithm</td></tr>
+        <tr><td>GRPO</td><td>Group-relative reward advantages with clipped ratios</td><td>Yes, multiple outputs per prompt</td><td>No</td><td>Conceptually similar grouping, different objective</td></tr>
+      </tbody></table></div>
+    </div></section>
+
+    <section class="tab" id="worked"><div class="page">
+      <div class="eyebrow">Concrete pass · Generation, routing, preference</div>
+      <h1>Trace one user through OneRec.</h1>
+      <p class="lede">This compact example keeps the real sequence of operations while using small invented numbers.</p>
+
+      <h2>1 · Encode history</h2>
+      <div class="token-stream" style="overflow-x:auto">
+        <span class="token item">football<br><small>(12,4,8)</small></span><span class="arrow">→</span><span class="token item">highlights<br><small>(12,7,2)</small></span><span class="arrow">→</span><span class="token item">cooking<br><small>(31,9,5)</small></span><span class="arrow">→</span><span class="token item">football<br><small>(12,5,1)</small></span>
+      </div>
+      <p>The encoder sees all flattened semantic tokens and produces contextual states \(H=\operatorname{Encoder}(H_u)\).</p>
+
+      <h2>2 · Route a decoder token</h2>
+      <p>At one decoding position, suppose the router’s largest expert probabilities are expert 4 at 0.52 and expert 17 at 0.31. Top-2 routing zeros the rest:</p>
+      <div class="math"><span class="label">Sparse FFN update</span>\[h'=h+0.52\operatorname{FFN}_4(h)+0.31\operatorname{FFN}_{17}(h)\]</div>
+      <p>The gate is sparse but not necessarily renormalized after top-k in the paper’s displayed equation; implementation details can choose normalization and load-balancing behavior.</p>
+
+      <h2>3 · Generate two candidate sessions</h2>
+      <div class="grid2">
+        <div class="card"><h3>Session A</h3><p>football analysis → match highlights → transfer news → cooking recipe → comedy</p><p><strong>Reward model:</strong> 0.82</p></div>
+        <div class="card"><h3>Session B</h3><p>five near-duplicate football clips from the same match</p><p><strong>Reward model:</strong> 0.41</p></div>
+      </div>
+      <p>For this user, (S^w=A) and (S^l=B). Another user could receive the opposite preference if repetition better matches their behavior.</p>
+
+      <h2>4 · See the DPO margin move</h2>
+      <p>Let the new model improve the winner log-probability relative to the old snapshot by \(+1.2\), while its loser relative log-probability changes by \(-0.4\). With \(\beta=0.1\):</p>
+      <div class="derivation">
+        <h3>Pairwise preference loss</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[m=(+1.2)-(-0.4)=1.6\]</div><div class="step-explain"><strong>Compute relative preference margin.</strong>Winner change minus loser change.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\beta m=0.16,\qquad \sigma(0.16)\approx0.540\]</div><div class="step-explain"><strong>Convert to pair probability.</strong>The model has moved modestly toward the desired ordering.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\mathcal L_{DPO}=-\log 0.540\approx0.616&lt;0.693\]</div><div class="step-explain"><strong>Loss falls from the zero-margin baseline.</strong>Gradient keeps rewarding a larger winner-over-loser relative margin.</div></div>
+      </div>
+
+      <div class="quiz"><h3>Reasoning check</h3><p>Why not train only on the reward model’s top session and discard NTP?</p><button data-answer="onerec-worked-q">Reveal answer</button><div class="answer" id="onerec-worked-q">That would aggressively optimize a learned proxy on a tiny self-selected subset and can drift away from valid, diverse, high-quality session generation. NTP anchors the model to logged good sessions; DPO supplies a relative correction between current-model alternatives.</div></div>
+    </div></section>
+
+    <section class="tab" id="evidence"><div class="page">
+      <div class="eyebrow">Production system · Claims in context</div>
+      <h1>Offline gains became an online watch-time lift.</h1>
+      <p class="lede">The paper reports a deployed 1B-parameter model on Kuaishou, with a separate DPO sampling service, reward model, training stack, and online inference model.</p>
+
+      <h2>Deployment data flow</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Three connected services</strong><span>Model snapshots circulate between them</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  LOG["online logs"] --> TRAIN["offline trainer<br/>NTP + DPO"]
+  TRAIN --> ONLINE["online OneRec<br/>1B inference"]
+  TRAIN --> SAMPLE["DPO sample server<br/>beam 128"]
+  ONLINE --> USERS["recommended sessions"]
+  SAMPLE --> RM["session reward model"]
+  RM --> PAIRS["winner / loser pairs"]
+  PAIRS --> TRAIN
+  USERS --> LOG
+  class LOG input; class TRAIN,ONLINE,SAMPLE,RM param; class PAIRS route; class USERS output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The serving stack uses KV-cache decoding, float16 quantization, and beam size 128. Training uses A800 GPUs, XLA, and bfloat16 according to the paper.</figcaption>
+      </figure>
+
+      <h2>Reported online A/B results</h2>
+      <div class="grid3">
+        <div class="metric"><b>+0.57%</b><small>total watch time · OneRec-0.1B</small><p>Compared with the current multi-stage system.</p></div>
+        <div class="metric"><b>+1.21%</b><small>total watch time · OneRec-1B</small><p>Scaling the base generator improved the online metric.</p></div>
+        <div class="metric"><b>+1.68%</b><small>total watch time · OneRec-1B + IPA</small><p>Average view duration was reported at +6.56% for this variant.</p></div>
+      </div>
+      <p>The experiment used 1% main traffic in the Kuaishou main-page scenario. The abstract rounds the watch-time result to 1.6%; the detailed table reports 1.68%.</p>
+
+      <h2>Offline ablation takeaways</h2>
+      <div class="grid2">
+        <div class="note"><h3>Session-wise beats point-wise.</h3><p>OneRec-1B exceeds TIGER-1B on reported maximum session watch time and like-rate metrics, supporting list-context modeling in this setup.</p></div>
+        <div class="note"><h3>IPA beats listed preference baselines.</h3><p>The iterative self-hard sampling strategy reports stronger metrics than DPO, IPO, cDPO, rDPO, CPO, SimPO, and S-DPO variants.</p></div>
+        <div class="note"><h3>Model scale helps through 1B.</h3><p>The paper reports consistent offline gains from 0.05B to 1B, with sparse experts decoupling total capacity from active compute.</p></div>
+        <div class="note"><h3>More DPO data has diminishing returns.</h3><p>Increasing sampling from 1% to 5% raises GPU demand roughly fivefold while adding little average quality.</p></div>
+      </div>
+
+      <h2>Limitations and audit notes</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Private evaluation</b><span>Data, production baseline, reward labels, and serving stack are not independently reproducible from the paper.</span></div>
+        <div class="caveat"><b>Reward-model dependence</b><span>Offline metrics are themselves reward-model predictions; online A/B evidence is therefore especially important.</span></div>
+        <div class="caveat"><b>Multi-objective gap</b><span>The authors report limitations on interaction indicators such as likes despite watch-time gains.</span></div>
+        <div class="caveat"><b>Preprint metadata</b><span>The PDF still contains placeholder conference/copyright metadata; treat it as arXiv v1 rather than a finalized venue paper.</span></div>
+        <div class="caveat"><b>Feedback loops</b><span>Training on logged exposure and then self-generated reward pairs can amplify existing preferences and blind spots.</span></div>
+        <div class="caveat"><b>Operational complexity</b><span>“One model” still requires tokenization, distributed MoE, beam serving, reward inference, sampling, and continuous synchronization.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>OneRec in ten lines.</h1>
+      <p class="lede">Rebuild the system from catalog representation through online preference iteration.</p>
+
+      <div class="table-wrap"><table><thead><tr><th>Concept</th><th>Memory hook</th><th>Precise detail</th></tr></thead><tbody>
+        <tr><td>Cascade problem</td><td>Discarded items never return</td><td>Local stage recall upper-bounds every later ranker.</td></tr>
+        <tr><td>Unified generator</td><td>History directly to session</td><td>One encoder-decoder emits final item IDs autoregressively.</td></tr>
+        <tr><td>Item tokens</td><td>Balanced residual repairs</td><td>Three levels of 8192-way balanced k-means codes in the reported setup.</td></tr>
+        <tr><td>Session objective</td><td>Later items see earlier items</td><td>\(p(S\mid H)=\prod_jp(v_j\mid H,v_{\lt j})\).</td></tr>
+        <tr><td>NTP</td><td>Imitate good logged sessions</td><td>Teacher-forced cross-entropy over flattened BOS + semantic-code tokens.</td></tr>
+        <tr><td>Sparse MoE</td><td>24 stored, 2 active</td><td>Top-2 token routing through decoder FFN experts.</td></tr>
+        <tr><td>Reward model</td><td>User-aware session critic</td><td>Target-aware item features, session self-attention, outcome towers.</td></tr>
+        <tr><td>IPA pair</td><td>Best vs worst of 128</td><td>Current model generates sessions; reward model selects personalized winner and loser.</td></tr>
+        <tr><td>DPO update</td><td>Prefer winner relative to old snapshot</td><td>Optimize \(\mathcal L_{NTP}+\lambda\mathcal L_{DPO}\), then refresh snapshot.</td></tr>
+        <tr><td>Online result</td><td>1B + IPA wins</td><td>Reported +1.68% total watch time and +6.56% average view duration.</td></tr>
+      </tbody></table></div>
+
+      <h2>Interview drill</h2>
+      <div class="grid2">
+        <div class="note"><h3>Why session-wise?</h3><p>It conditions each recommendation on prior slate choices, allowing learned coherence, diversity, and ordering instead of post-hoc rules.</p></div>
+        <div class="note"><h3>Why balanced codes?</h3><p>To prevent upper-level code skew from forming an hourglass that wastes token capacity and burdens the generator.</p></div>
+        <div class="note"><h3>Why MoE only in decoder FFNs?</h3><p>It expands conditional generation capacity while keeping per-token active FFN compute near top-\(K\), though attention remains dense.</p></div>
+        <div class="note"><h3>Why a reward model?</h3><p>Online recommendation usually exposes one session, so simultaneous human winner/loser labels are unavailable; the model scores counterfactual generated sessions.</p></div>
+        <div class="note"><h3>Why iterative DPO?</h3><p>Current-model samples are hard, on-distribution alternatives. Updating pairs after the policy changes avoids training forever on stale negatives.</p></div>
+        <div class="note"><h3>Main risk?</h3><p>Reward-model and exposure bias can be amplified by self-training; online multi-objective evaluation is essential.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Self-test</h3><p>1. Explain why cascade errors are irreversible.<br>2. Derive balanced residual codes.<br>3. Write the session likelihood.<br>4. Derive top-2 MoE routing.<br>5. Reconstruct one IPA iteration.</p><button data-answer="onerec-final">Reveal compact answers</button><div class="answer" id="onerec-final">1. Later stages only see earlier candidate sets. 2. Choose an equal-capacity nearest centroid, subtract it, and repeat over levels. 3. Product of item probabilities conditioned on history and prior generated items, expanded to code tokens. 4. Softmax expert scores, retain top two, zero others, weighted FFN sum plus residual. 5. Sample 128 sessions from \(M_t\), reward them, choose max/min, optimize NTP + DPO against reference \(M_t\), then set the new snapshot.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room</div>
+      <h1>Primary paper and conceptual prerequisites.</h1>
+      <p class="lede">OneRec combines several mature ideas. Reading it well means separating what is inherited—semantic tokens, sparse MoE, DPO—from the paper’s session-wise industrial integration and iterative sampling strategy.</p>
+
+      <div class="paper"><div><strong>OneRec: Unifying Retrieve and Rank with Generative Recommender and Iterative Preference Alignment</strong>Jiaxin Deng, Shiyao Wang, Kuo Cai, Lejian Ren, Qigen Hu, Weifeng Ding, Qiang Luo, Guorui Zhou · arXiv v1, February 2025</div><div class="paper-links"><a href="papers/OneRec.pdf">Local PDF</a><a href="https://arxiv.org/abs/2502.18965">arXiv</a></div></div>
+
+      <h2>Suggested paper path</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · Introduction + Figure 1</b><strong>Cascade motivation</strong><p>Track the candidate counts and identify the claimed stage-wise ceiling.</p></div>
+        <div class="event"><b>2 · §3.1–3.2</b><strong>Tokens and session generation</strong><p>Derive balanced k-means, semantic token recursion, MoE equation, and NTP sequence layout.</p></div>
+        <div class="event"><b>3 · §3.3</b><strong>Reward model and IPA</strong><p>Follow Algorithm 2 from 128 responses to winner/loser DPO pairs.</p></div>
+        <div class="event"><b>4 · §4–5.5</b><strong>System and evidence</strong><p>Separate reward-model offline metrics, ablations, serving optimizations, and online A/B outcomes.</p></div>
+      </div>
+
+      <h2>Companion foundations</h2>
+      <div class="grid2">
+        <div class="note"><h3>Semantic IDs</h3><p>Learn RQ-VAE/TIGER first, then contrast OneRec’s balanced residual k-means and session-wise decoding.</p><a href="../ML%20-%20Semantic%20IDs/">Open Semantic IDs</a></div>
+        <div class="note"><h3>PPO &amp; GRPO</h3><p>Contrast OneRec’s pairwise DPO objective with reward-weighted policy-gradient methods used in RL and LLM post-training.</p><a href="../RL%20-%20PPO%20and%20GRPO/">Open RL guide</a></div>
+      </div>
+      <div class="callout"><strong>Accuracy note</strong><p>Equations, configurations, and reported metrics were checked against the downloaded arXiv v1 paper. Worked sessions, router weights, and DPO margin values are original teaching examples.</p></div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+</body>
+</html>

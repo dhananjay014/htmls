@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and mathematical guide to Multimodal Mixtures of Experts (MMoE).">
+  <title>Multimodal MMoE · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body data-guide-title="Multimodal MMoE" style="--accent:#a04b3e;--accent-dark:#74352d;--accent-soft:#f2dfdc">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">MM</span><span>Multimodal MMoE</span></div>
+      <p>Route redundancy, uniqueness, and synergy to interaction-specialized experts.</p>
+    </div>
+    <div class="nav-label">Build the idea</div>
+    <button class="tab-btn active" data-tab="overview"><span class="num">00</span>Start here</button>
+    <button class="tab-btn" data-tab="taxonomy"><span class="num">01</span>Three interactions</button>
+    <button class="tab-btn" data-tab="categorize"><span class="num">02</span>Categorization math</button>
+    <button class="tab-btn" data-tab="experts"><span class="num">03</span>Train the experts</button>
+    <button class="tab-btn" data-tab="routing"><span class="num">04</span>Route &amp; fuse</button>
+    <div class="nav-label">Reason with it</div>
+    <button class="tab-btn" data-tab="worked"><span class="num">05</span>Worked cases</button>
+    <button class="tab-btn" data-tab="evidence"><span class="num">06</span>Evidence &amp; limits</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">07</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">08</span>Paper &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20Feature%20Interactions/">Feature Interactions</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">Multimodal MMoE / Start here</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/Multimodal-MMoE.pdf">PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Multimodal interaction experts · 2024 revision</div>
+      <h1>Not every pair of modalities interacts the same way.</h1>
+      <p class="lede">Sometimes image and text repeat the answer. Sometimes only one carries the clue. Sometimes the answer appears only when their meanings conflict or combine. Multimodal MMoE trains a different expert for each case.</p>
+      <div class="meta-row"><span class="chip primary">redundancy</span><span class="chip">uniqueness</span><span class="chip">synergy</span><span class="chip">specialized experts</span><span class="chip">soft routing</span></div>
+      <div class="callout blue"><strong>Name disambiguation</strong><p>The linked paper’s MMoE means <em>Multimodal Mixtures of Experts</em>. It is not Google’s 2018 Multi-gate Mixture-of-Experts architecture for multi-task recommendation, despite the similar acronym.</p></div>
+
+      <h2>The full method in one picture</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Categorize → specialize → route</strong><span>Training on the left, inference on the right</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  D["image + text<br/>labeled training data"] --> UNI["strong image-only<br/>and text-only predictions"]
+  UNI --> CAT["assign R, U, or S<br/>interaction category"]
+  CAT --> ER["redundancy expert"]
+  CAT --> EU["uniqueness expert"]
+  CAT --> ES["synergy expert"]
+  X["new image + text"] --> ROUTE["interaction router<br/>weights wr, wu, ws"]
+  ER --> MIX["weighted logit fusion"]
+  EU --> MIX
+  ES --> MIX
+  ROUTE --> MIX
+  MIX --> Y["task prediction"]
+  class D,X input; class UNI,ER,EU,ES param; class CAT op; class ROUTE route; class MIX op; class Y output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#f2dfdc,stroke:#a04b3e,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The method changes the training distribution seen by each expert. It does not require a brand-new backbone: the paper applies it to fusion VLMs, multimodal-extended LLMs, and image-captioned LLMs.</figcaption>
+      </figure>
+
+      <div class="grid3">
+        <div class="concept"><h3>Redundancy</h3><p>Both modalities independently support the correct label. Fusion should be robust and avoid double-counting the same evidence.</p></div>
+        <div class="concept"><h3>Uniqueness</h3><p>Only one modality independently supports the correct label. The model must identify and trust the informative side.</p></div>
+        <div class="concept"><h3>Synergy</h3><p>Neither modality alone predicts the label; their joint relation supplies the task-relevant information.</p></div>
+      </div>
+
+      <h2>The key modeling bet</h2>
+      <p>A monolithic multimodal model applies the same parameters to all three situations. MMoE bets that a model trained only on synergistic examples will learn different interaction features from one trained on redundant examples—and that an input-dependent router can choose among them at test time.</p>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Monolithic model</b>\[\hat y=f(x_{image},x_{text})\]<p>One parameter set handles every interaction regime.</p></div>
+        <div class="formula-card"><b>Multimodal MMoE</b>\[\hat y=\sum_{e\in\{r,u,s\}}w_e(x)f_e(x),\qquad \sum_e w_e=1\]<p>Three specialized predictors are mixed per example.</p></div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>Classify how the modalities relate before asking what they jointly predict.</p></div>
+      <div class="paper"><div><strong>MMoE: Enhancing Multimodal Models with Mixtures of Multimodal Interaction Experts</strong>Yu et al., arXiv:2311.09580 v3</div><div class="paper-links"><a href="papers/Multimodal-MMoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/2311.09580">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="taxonomy"><div class="page">
+      <div class="eyebrow">Step 1 · Learn the interaction vocabulary</div>
+      <h1>Same inputs, three information structures.</h1>
+      <p class="lede">The categories describe where task-relevant information lives—not whether two raw modalities merely look similar.</p>
+
+      <h2>Start with two unimodal predictions</h2>
+      <div class="truth-scroll">
+        <div class="truth-table" role="table" aria-label="Multimodal interaction categories">
+          <div class="head">Type</div><div class="head">Image prediction</div><div class="head">Text prediction</div><div class="head">True label</div><div class="head">Interpretation</div>
+          <div class="row-label">Redundancy</div><div>A</div><div>A</div><div>A</div><div>both sufficient</div>
+          <div class="row-label">Uniqueness</div><div>A</div><div>B</div><div>A or B</div><div>one sufficient</div>
+          <div class="row-label">Synergy</div><div>A</div><div>B</div><div>C</div><div>joint relation needed</div>
+        </div>
+      </div>
+      <p class="plain-note">For binary labels, the synergy row often appears as both unimodal models choosing the same wrong class while the multimodal label is the opposite class. The A/B/C notation is conceptual and also covers multi-class tasks.</p>
+
+      <h2>Three concrete intuitions</h2>
+      <div class="grid3">
+        <div class="card"><h3>Redundancy · confirmation</h3><p><strong>Image:</strong> person laughing.<br><strong>Text:</strong> “That was hilarious.”<br><strong>Task:</strong> humor = yes.</p><p>Either side already carries the answer.</p></div>
+        <div class="card"><h3>Uniqueness · dominant modality</h3><p><strong>Image:</strong> generic product photo.<br><strong>Text:</strong> “Battery died in one hour.”<br><strong>Task:</strong> negative review = yes.</p><p>The text carries the decisive evidence.</p></div>
+        <div class="card"><h3>Synergy · relation creates signal</h3><p><strong>Image:</strong> deep winter snow.<br><strong>Text:</strong> “Happy spring—beautiful blossoms!”<br><strong>Task:</strong> sarcasm = yes.</p><p>The contradiction, not either side alone, is the clue.</p></div>
+      </div>
+
+      <h2>Connection to partial information decomposition</h2>
+      <p>Information theory can decompose information about \(Y\) into redundant, unique, and synergistic contributions from \(X_1\) and \(X_2\). Exact estimation is difficult for high-dimensional continuous modalities, so the paper uses a prediction-disagreement heuristic as a practical proxy.</p>
+      <div class="math"><span class="label">Conceptual decomposition, not the paper’s estimator</span>\[I(X_1,X_2;Y)=R+U_1+U_2+S\]</div>
+      <div class="callout red"><strong>The labels are approximate interaction types.</strong><p>A unimodal model can be wrong because it is weak, not because the information is absent. The MMoE categorization therefore depends on the quality, calibration, and biases of the models used to produce unimodal predictions.</p></div>
+
+      <h2>Why sarcasm and humor expose the issue</h2>
+      <div class="grid2">
+        <div class="note"><h3>Congruent cases are easy.</h3><p>When words, facial expression, image, and tone all agree, correspondence-focused multimodal pretraining is well matched to the task.</p></div>
+        <div class="note"><h3>Incongruent cases are diagnostic.</h3><p>Sarcasm often inverts literal meaning. A model must represent opposition, timing, or context rather than simply align similar features.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="categorize"><div class="page">
+      <div class="eyebrow">Step 2 · Turn intuition into labels</div>
+      <h1>Categorization is a two-error count.</h1>
+      <p class="lede">Compare each unimodal prediction with the true multimodal task label. Zero, one, or two disagreements map directly to redundancy, uniqueness, or synergy.</p>
+
+      <h2>Definitions</h2>
+      <div class="symbols">
+        <div class="symbol"><code>x_1, x_2</code>Two input modalities, such as image and text.</div>
+        <div class="symbol"><code>y_1=f_1(x_1)</code>Prediction from the first unimodal model.</div>
+        <div class="symbol"><code>y_2=f_2(x_2)</code>Prediction from the second unimodal model.</div>
+        <div class="symbol"><code>y_m</code>Ground-truth multimodal task label used for categorization.</div>
+        <div class="symbol"><code>δ(a,b)</code>0 if predictions agree; 1 if they differ.</div>
+        <div class="symbol"><code>Δ₁,₂</code>Number of unimodal predictions that disagree with \(y_m\).</div>
+      </div>
+
+      <div class="derivation">
+        <h3>Paper’s interaction-based categorization</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\delta(a,b)=\begin{cases}0,&a=b\\1,&a\ne b\end{cases}\]</div><div class="step-explain"><strong>Define discrepancy.</strong>For classification, only agreement or disagreement is counted.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\Delta_{1,2}=\delta(y_1,y_m)+\delta(y_2,y_m)\]</div><div class="step-explain"><strong>Count unimodal errors.</strong>The score lies in \(\{0,1,2\}\).</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\Delta=0\Rightarrow R,\qquad \Delta=1\Rightarrow U,\qquad \Delta=2\Rightarrow S\]</div><div class="step-explain"><strong>Assign the bucket.</strong>Both right → redundant; one right → unique; neither right → synergistic.</div></div>
+      </div>
+
+      <h2>Example calculation</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Snow image + “happy spring”</b>\[y_{image}=\text{not sarcastic},\ y_{text}=\text{not sarcastic},\ y_m=\text{sarcastic}\]\[\Delta=1+1=2\Rightarrow\text{synergy}\]</div>
+        <div class="formula-card"><b>Laughing face + humorous sentence</b>\[y_{image}=y_{text}=y_m=\text{humorous}\]\[\Delta=0+0=0\Rightarrow\text{redundancy}\]</div>
+      </div>
+
+      <h2>Practical data pipeline</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>How the training subsets are produced</strong><span>Strong frozen models act as labelers</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  PAIR["labeled image-text pair"] --> IMG["vision-only prompt"]
+  PAIR --> TXT["text-only prompt"]
+  IMG --> Y1["prediction y1<br/>+ confidence"]
+  TXT --> Y2["prediction y2<br/>+ confidence"]
+  Y1 --> FILTER["confidence filter"]
+  Y2 --> FILTER
+  FILTER --> DELTA["compute Delta"]
+  PAIR --> DELTA
+  DELTA --> R["R subset"]
+  DELTA --> U["U subset"]
+  DELTA --> S["S subset"]
+  class PAIR input; class IMG,TXT param; class Y1,Y2 op; class FILTER,DELTA route; class R,U,S output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#f2dfdc,stroke:#a04b3e,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The paper uses state-of-the-art unimodal prompting, filters low-confidence examples (main threshold 0.1 in one reported setup), and rebalances labels to reduce expert-training collapse.</figcaption>
+      </figure>
+
+      <div class="callout"><strong>Why confidence filtering matters</strong><p>If \(|p(\text{Yes})-p(\text{No})|\) is small, the bucket may reflect an uncertain labeler rather than a true interaction. Too much filtering, however, leaves too little training data—especially for rare synergy cases.</p></div>
+    </div></section>
+
+    <section class="tab" id="experts"><div class="page">
+      <div class="eyebrow">Step 3 · Specialize by data distribution</div>
+      <h1>Three copies learn three different habits.</h1>
+      <p class="lede">The simplest MMoE uses the same backbone architecture three times. Specialization comes from training each copy only on examples assigned to one interaction regime.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Expert training</strong><span>Independent fine-tuning paths</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart TB
+  BASE["same pretrained<br/>multimodal backbone"] --> FR["copy fr"]
+  BASE --> FU["copy fu"]
+  BASE --> FS["copy fs"]
+  DR["redundancy subset"] --> FR
+  DU["uniqueness subset"] --> FU
+  DS["synergy subset"] --> FS
+  FR --> ER["redundancy expert"]
+  FU --> EU["uniqueness expert"]
+  FS --> ES["synergy expert"]
+  class DR,DU,DS input; class BASE,FR,FU,FS param; class ER,EU,ES output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The experts are not token-level sparse experts inside one Transformer layer. They are separately trained multimodal task models whose output logits are fused.</figcaption>
+      </figure>
+
+      <h2>Training objective</h2>
+      <div class="math"><span class="label">Interaction-specific empirical risk</span>\[\theta_e^*=\arg\min_{\theta_e}\frac{1}{|D_e|}\sum_{(x,y)\in D_e}\ell\!\left(f_e(x;\theta_e),y\right),\qquad e\in\{r,u,s\}\]</div>
+      <p>Each expert minimizes the normal task loss—such as binary cross-entropy for sarcasm—but over a different conditional data distribution \(D_e\).</p>
+
+      <h2>What each expert should learn</h2>
+      <div class="grid3">
+        <div class="concept"><h3>\(f_r\) · redundancy</h3><p>Confirm agreement, remain robust if one view is noisy, and avoid letting duplicated evidence inflate confidence blindly.</p></div>
+        <div class="concept"><h3>\(f_u\) · uniqueness</h3><p>Detect which modality is informative for this sample and avoid averaging it away with an unhelpful modality.</p></div>
+        <div class="concept"><h3>\(f_s\) · synergy</h3><p>Model cross-modal relations—contradiction, timing, complementarity, or higher-order combinations—not visible in either marginal input.</p></div>
+      </div>
+
+      <h2>Same framework, different backbones</h2>
+      <div class="table-wrap"><table><thead><tr><th>Backbone family</th><th>How modalities meet</th><th>Paper examples</th><th>Where MMoE sits</th></tr></thead><tbody>
+        <tr><td>Fusion VLM</td><td>Cross-attention over image regions and words</td><td>ALBEF</td><td>Fine-tune one full fusion model per interaction subset</td></tr>
+        <tr><td>Multimodal-extended LLM</td><td>Image encoder/adaptor feeds an LLM</td><td>BLIP2</td><td>Fine-tune interaction-specialized multimodal LLM copies</td></tr>
+        <tr><td>Image-captioned LLM</td><td>Convert image to text, then use a text LLM</td><td>Qwen2 setup</td><td>Train specialized text-LLM predictors over caption + text</td></tr>
+      </tbody></table></div>
+
+      <div class="callout blue"><strong>An architectural extension is possible but not required.</strong><p>The paper notes that redundancy experts could use late fusion and synergy experts could use expressive higher-order operators. Its main experiments demonstrate the simpler data-specialization recipe.</p></div>
+
+      <h2>Cost implication</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Parameter storage</b><span>Three expert copies plus a router can approach three times one fine-tuned model’s storage.</span></div>
+        <div class="caveat"><b>Inference compute</b><span>Softly fusing all experts runs all three unless the system adds hard/sparse routing.</span></div>
+        <div class="caveat"><b>Subset imbalance</b><span>Synergy examples may be scarce; experts can overfit or collapse without filtering and balancing.</span></div>
+        <div class="caveat"><b>Specialization leakage</b><span>Noisy categories train experts on the wrong regime, reducing the value of separation.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="routing"><div class="page">
+      <div class="eyebrow">Step 4 · Choose experts without the label</div>
+      <h1>The router must infer the interaction before the answer.</h1>
+      <p class="lede">At training time, the true label helps compute the category. At inference time the true label is unknown, so a separate fusion model predicts soft interaction weights from the input itself.</p>
+
+      <h2>Why training-time categorization cannot be reused directly</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Training category</b>\[e=g(y_1,y_2,\color{#a23f35}{y_m})\]<p>The true task label \(y_m\) is available.</p></div>
+        <div class="formula-card"><b>Inference routing</b>\[(w_r,w_u,w_s)=h(x_1,x_2)\]<p>The router must predict interaction type from inputs only.</p></div>
+      </div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Soft logit fusion</strong><span>All experts can contribute</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["new image + text"] --> R["router h(x)"]
+  X --> FR["expert fr"]
+  X --> FU["expert fu"]
+  X --> FS["expert fs"]
+  R --> W["softmax weights<br/>wr, wu, ws"]
+  FR --> MIX["wr zr + wu zu + ws zs"]
+  FU --> MIX
+  FS --> MIX
+  W --> MIX
+  MIX --> SM["task softmax"] --> Y["prediction"]
+  class X input; class R,FR,FU,FS param; class W route; class MIX,SM op; class Y output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f2dfdc,stroke:#a04b3e,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Fusing logits before the final task softmax preserves more information than voting over already-discretized labels. The paper’s model-based router uses a fine-tuned BLIP2 interaction classifier.</figcaption>
+      </figure>
+
+      <h2>Fusion equation</h2>
+      <div class="math"><span class="label">Per-example mixture</span>\[z(x)=w_r(x)z_r(x)+w_u(x)z_u(x)+w_s(x)z_s(x),\qquad \hat p(y\mid x)=\operatorname{softmax}(z(x))\]</div>
+
+      <h2>Router choices</h2>
+      <div class="table-wrap"><table><thead><tr><th>Fusion</th><th>Weights</th><th>Advantage</th><th>Limitation</th></tr></thead><tbody>
+        <tr><td>Average</td><td>(1/3,1/3,1/3)</td><td>No router training</td><td>Ignores which interaction is present</td></tr>
+        <tr><td>Maximum</td><td>Select highest expert logit</td><td>Simple confidence-based choice</td><td>Expert confidence may be miscalibrated</td></tr>
+        <tr><td>Dataset-frequency</td><td>Fixed category proportions</td><td>Uses prior prevalence</td><td>Same routing for every example</td></tr>
+        <tr><td>Model-based</td><td>\(h(x_1,x_2)\)</td><td>Input-dependent soft routing</td><td>Requires another trained model; routing errors remain</td></tr>
+        <tr><td>Oracle</td><td>True test interaction category</td><td>Measures upper-bound opportunity</td><td>Uses unavailable label information</td></tr>
+      </tbody></table></div>
+
+      <h2>Why routing may be easier than task prediction</h2>
+      <p>The paper argues that “do these modalities agree, differ, or jointly shift meaning?” can depend on broader relation features than the final task label. A router can therefore be useful even when its base model would not solve the sarcasm or humor task perfectly.</p>
+      <div class="callout red"><strong>But the router is the main observed bottleneck.</strong><p>Oracle fusion is consistently much stronger than learned fusion in the ablation. The experts contain unrealized headroom; selecting them accurately is the difficult part.</p></div>
+    </div></section>
+
+    <section class="tab" id="worked"><div class="page">
+      <div class="eyebrow">Concrete reasoning · Label, route, fuse</div>
+      <h1>Work three multimodal cases end to end.</h1>
+      <p class="lede">Each case shows the training-time category and an illustrative inference-time routing distribution. The probabilities are teaching examples, not paper outputs.</p>
+
+      <div class="interactive" data-choice-group>
+        <div class="interactive-head"><strong>Choose an interaction case</strong><span>Watch the category and routing logic change.</span></div>
+        <div class="interactive-controls"><button class="choice-btn active" data-choice="red">Redundancy</button><button class="choice-btn" data-choice="unique">Uniqueness</button><button class="choice-btn" data-choice="syn">Synergy</button></div>
+        <div class="interactive-body">
+          <div class="choice-panel active" data-choice-panel="red">
+            <div class="grid2"><div class="card"><h3>Inputs</h3><p>Image: audience laughing.<br>Transcript: “That punchline was hilarious.”<br>True humor label: yes.</p></div><div class="card"><h3>Predictions</h3><p>\(y_{image}=yes,\ y_{text}=yes,\ y_m=yes\)<br>\(\Delta=0+0=0\Rightarrow R\)</p></div></div>
+            <div class="math">\[(w_r,w_u,w_s)=(0.78,0.14,0.08)\]</div><p>The redundancy expert dominates; other experts retain small soft contributions.</p>
+          </div>
+          <div class="choice-panel" data-choice-panel="unique">
+            <div class="grid2"><div class="card"><h3>Inputs</h3><p>Image: neutral talking head.<br>Transcript: “My battery exploded after charging.”<br>True safety label: risk.</p></div><div class="card"><h3>Predictions</h3><p>\(y_{image}=safe,\ y_{text}=risk,\ y_m=risk\)<br>\(\Delta=1+0=1\Rightarrow U\)</p></div></div>
+            <div class="math">\[(w_r,w_u,w_s)=(0.12,0.76,0.12)\]</div><p>The uniqueness expert should learn not to dilute the text evidence with the visually neutral modality.</p>
+          </div>
+          <div class="choice-panel" data-choice-panel="syn">
+            <div class="grid2"><div class="card"><h3>Inputs</h3><p>Image: heavy snow and bare trees.<br>Text: “Happy spring! Loving all these blossoms.”<br>True sarcasm label: yes.</p></div><div class="card"><h3>Predictions</h3><p>\(y_{image}=no,\ y_{text}=no,\ y_m=yes\)<br>\(\Delta=1+1=2\Rightarrow S\)</p></div></div>
+            <div class="math">\[(w_r,w_u,w_s)=(0.08,0.17,0.75)\]</div><p>The synergy expert must detect contradiction between literal text and visual context.</p>
+          </div>
+        </div>
+      </div>
+
+      <h2>Numeric fusion</h2>
+      <p>Suppose the three experts output sarcasm logits \(z_r=-0.6\), \(z_u=0.2\), and \(z_s=2.1\) for the snow/spring case, and the router predicts the synergy-heavy weights above:</p>
+      <div class="derivation">
+        <h3>From expert logits to probability</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[z=0.08(-0.6)+0.17(0.2)+0.75(2.1)=1.561\]</div><div class="step-explain"><strong>Mix logits.</strong>The specialized synergy signal dominates without discarding the other experts.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[p(\text{sarcasm})=\sigma(1.561)\approx0.827\]</div><div class="step-explain"><strong>Apply the task link.</strong>For binary classification, sigmoid converts the mixed logit to a probability.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\text{if router used }(1,0,0):\quad \sigma(-0.6)\approx0.354\]</div><div class="step-explain"><strong>Routing determines whether specialization helps.</strong>A wrong hard route would reverse the prediction despite a strong synergy expert.</div></div>
+      </div>
+
+      <div class="quiz"><h3>Subtle question</h3><p>If both unimodal models are weak and wrong, does \(\Delta=2\) prove true synergistic information?</p><button data-answer="mmoe-worked-q">Reveal answer</button><div class="answer" id="mmoe-worked-q">No. It only assigns the paper’s proxy category. Both models may fail despite sufficient unimodal information. High-quality, calibrated unimodal labelers and confidence filtering reduce—but cannot eliminate—this ambiguity.</div></div>
+    </div></section>
+
+    <section class="tab" id="evidence"><div class="page">
+      <div class="eyebrow">Empirical results · Read the variance</div>
+      <h1>Specialization helps often, not automatically.</h1>
+      <p class="lede">The paper tests three backbone families on sarcasm and humor datasets. Gains depend on the backbone, dataset, router, and quality of the interaction labels.</p>
+
+      <h2>Selected reported results</h2>
+      <div class="table-wrap"><table><thead><tr><th>Dataset</th><th>Backbone</th><th>Base F1</th><th>+ MMoE F1</th><th>Readout</th></tr></thead><tbody>
+        <tr><td>MUStARD</td><td>ALBEF</td><td>48.51 ± 2.21</td><td>51.95 ± 2.81</td><td>Moderate gain, overlapping variability</td></tr>
+        <tr><td>MUStARD</td><td>BLIP2</td><td>62.65 ± 2.67</td><td>64.74 ± 2.49</td><td>Positive mean gain</td></tr>
+        <tr><td>MUStARD</td><td>Qwen2-1.5B</td><td>65.38 ± 5.16</td><td>72.34 ± 1.50</td><td>Largest selected gain</td></tr>
+        <tr><td>URFunny</td><td>ALBEF</td><td>68.67 ± 0.18</td><td>69.85 ± 0.32</td><td>Small consistent gain</td></tr>
+        <tr><td>URFunny</td><td>BLIP2</td><td>74.31 ± 0.04</td><td>74.32 ± 0.05</td><td>Essentially unchanged F1</td></tr>
+        <tr><td>URFunny</td><td>Qwen2-0.5B</td><td>70.46 ± 0.14</td><td>68.38 ± 1.55</td><td>Regression: MMoE is not universally beneficial</td></tr>
+      </tbody></table></div>
+
+      <h2>Router headroom</h2>
+      <div class="table-wrap"><table><thead><tr><th>ALBEF fusion</th><th>MUStARD F1</th><th>URFunny F1</th><th>MMSD2.0 F1</th></tr></thead><tbody>
+        <tr><td>Single baseline</td><td>47.90</td><td>68.87</td><td>78.87</td></tr>
+        <tr><td>Model-based fusion</td><td>48.97</td><td>70.20</td><td>80.71</td></tr>
+        <tr><td>Oracle interaction route</td><td>56.89</td><td>73.36</td><td>82.73</td></tr>
+      </tbody></table></div>
+      <p>The oracle uses test categories constructed with ground-truth labels, so it is not deployable. Its gap quantifies potential value trapped behind routing error.</p>
+
+      <h2>Failure modes</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Text-side bias</b><span>The paper reports unimodal text models about 16 accuracy points above vision models in its analysis, skewing categories toward text uniqueness.</span></div>
+        <div class="caveat"><b>Proxy taxonomy</b><span>Prediction disagreement is not an exact estimate of information-theoretic redundancy, uniqueness, or synergy.</span></div>
+        <div class="caveat"><b>Coarse granularity</b><span>One sample may contain several local interactions; a single R/U/S label compresses them into one bucket.</span></div>
+        <div class="caveat"><b>Router circularity</b><span>The system needs a capable multimodal model to infer which multimodal expert should solve the task.</span></div>
+        <div class="caveat"><b>Compute multiplication</b><span>Dense soft fusion evaluates all expert copies and adds another fusion model.</span></div>
+        <div class="caveat"><b>Domain scope</b><span>Evidence centers on image/text or video/text affective tasks, not arbitrary sensors, medicine, or recommendation modalities.</span></div>
+      </div>
+
+      <h2>When the idea is most plausible</h2>
+      <div class="grid2">
+        <div class="concept"><h3>Use MMoE when…</h3><p>The task genuinely mixes congruent, one-sided, and relational cases; you have strong unimodal labelers; and the quality gain justifies multiple experts.</p></div>
+        <div class="concept"><h3>Prefer one model when…</h3><p>Data is small, interaction regimes are not separable, latency is tight, or a single large backbone can already learn balanced cross-modal behavior.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>MMoE in nine lines.</h1>
+      <p class="lede">The complete answer starts with the taxonomy, derives the training labels, and ends with the train-test routing mismatch.</p>
+
+      <div class="table-wrap"><table><thead><tr><th>Concept</th><th>Memory hook</th><th>Precise statement</th></tr></thead><tbody>
+        <tr><td>Redundancy</td><td>Both alone are right</td><td>\(y_1=y_2=y_m\), so \(\Delta=0\).</td></tr>
+        <tr><td>Uniqueness</td><td>One alone is right</td><td>Exactly one unimodal prediction matches \(y_m\), so \(\Delta=1\).</td></tr>
+        <tr><td>Synergy</td><td>Neither alone is right</td><td>Both disagree with \(y_m\), so \(\Delta=2\).</td></tr>
+        <tr><td>Categorizer</td><td>Count two errors</td><td>\(\Delta=\delta(y_1,y_m)+\delta(y_2,y_m)\).</td></tr>
+        <tr><td>Experts</td><td>Same backbone, different subset</td><td>Fine-tune \(f_r,f_u,f_s\) independently on \(D_r,D_u,D_s\).</td></tr>
+        <tr><td>Router</td><td>Predict relation without label</td><td>Infer \(w_r,w_u,w_s\) from modalities at test time.</td></tr>
+        <tr><td>Fusion</td><td>Mix logits, then predict</td><td>\(z=\sum_e w_ez_e\), followed by task softmax/sigmoid.</td></tr>
+        <tr><td>Main bottleneck</td><td>Right expert, wrong route</td><td>Oracle routing substantially exceeds learned model-based fusion.</td></tr>
+        <tr><td>Main caveat</td><td>Disagreement is a proxy</td><td>Weak unimodal models can manufacture apparent synergy or uniqueness.</td></tr>
+      </tbody></table></div>
+
+      <h2>Interview drill</h2>
+      <div class="grid2">
+        <div class="note"><h3>Is this sparse MoE?</h3><p>Not in the main method. It trains three full task experts and softly fuses their outputs; all may run at inference.</p></div>
+        <div class="note"><h3>Why use the true label in categorization?</h3><p>The category asks which modalities independently contain enough information for the correct task answer, so correctness must be measured against \(y_m\).</p></div>
+        <div class="note"><h3>Why cannot \(\Delta\) be computed online?</h3><p>It requires \(y_m\), the answer being predicted. A separate router estimates the interaction from inputs only.</p></div>
+        <div class="note"><h3>Why soft fusion?</h3><p>Interactions need not be pure, router uncertainty is real, and multiple experts may contain useful evidence.</p></div>
+        <div class="note"><h3>Why is synergy hard?</h3><p>The signal lies in a relation—often contradiction or complementarity—rather than either modality’s marginal features.</p></div>
+        <div class="note"><h3>Closest limitation?</h3><p>Expert quality is only useful if categorization and routing are accurate enough to expose it.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Self-test</h3><p>1. Write the discrepancy and category equations.<br>2. Give one R, U, and S example.<br>3. Explain training versus inference routing.<br>4. Derive soft logit fusion.<br>5. Name two reasons a synergy label can be wrong.</p><button data-answer="mmoe-final">Reveal compact answers</button><div class="answer" id="mmoe-final">1. \(\delta(a,b)=\mathbf 1[a\ne b]\), \(\Delta=\delta(y_1,y_m)+\delta(y_2,y_m)\), mapped 0/1/2 to R/U/S. 2. Any valid examples where both/one/neither unimodal prediction is correct. 3. Training uses the true label; inference uses a learned router from inputs. 4. \(z=\sum_e w_ez_e\), then the task link. 5. Weak or miscalibrated unimodal models, low confidence, distribution shift, label noise, or coarse sample-level categorization.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room</div>
+      <h1>Primary source and study path.</h1>
+      <p class="lede">Read the interaction definition and train-test mismatch before the benchmark table; otherwise MMoE can look like a generic ensemble.</p>
+
+      <div class="paper"><div><strong>MMoE: Enhancing Multimodal Models with Mixtures of Multimodal Interaction Experts</strong>Haofei Yu, Zhengyang Qi, Lawrence Jang, Ruslan Salakhutdinov, Louis-Philippe Morency, Paul Pu Liang · arXiv v3, September 2024</div><div class="paper-links"><a href="papers/Multimodal-MMoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/2311.09580">arXiv</a></div></div>
+
+      <h2>Suggested paper path</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · §3.1</b><strong>Categorization</strong><p>Derive \(\delta\) and \(\Delta\), then inspect exactly how R/U/S labels are approximated.</p></div>
+        <div class="event"><b>2 · §3.2–3.3</b><strong>Experts and inference</strong><p>Separate subset-based specialization from the learned fusion model used when \(y_m\) is unavailable.</p></div>
+        <div class="event"><b>3 · §4–5</b><strong>Results and analysis</strong><p>Compare gains across backbone families and inspect per-interaction performance and scaling.</p></div>
+        <div class="event"><b>4 · §6</b><strong>Ablations</strong><p>Focus on confidence filtering, label balance, fusion strategies, and the oracle gap.</p></div>
+      </div>
+
+      <h2>Implementation</h2>
+      <div class="grid2">
+        <div class="note"><h3>Authors’ code</h3><p>The repository linked in the paper contains reproduction guidance and the multimodal expert pipeline.</p><a href="https://github.com/lwaekfjlk/mmoe">Open repository</a></div>
+        <div class="note"><h3>Feature-interaction companion</h3><p>Contrast MMoE’s sample-level interaction taxonomy with architectural interaction operators such as AutoInt, DHEN, and Wukong.</p><a href="../ML%20-%20Feature%20Interactions/#dhen">Open DHEN comparison</a></div>
+      </div>
+      <div class="callout"><strong>Accuracy note</strong><p>Method equations and reported results were checked against the downloaded v3 paper. Worked routing probabilities and logits are original explanatory examples.</p></div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+</body>
+</html>

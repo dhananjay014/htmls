@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and mathematical guide to PPO and GRPO in reinforcement learning and LLM post-training.">
+  <title>PPO &amp; GRPO · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body data-guide-title="PPO &amp; GRPO" style="--accent:#8a5a16;--accent-dark:#5d3b0e;--accent-soft:#f2e6cf">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">RL</span><span>PPO &amp; GRPO</span></div>
+      <p>Policy gradients, clipping, advantages, critics, and group-relative learning from scratch.</p>
+    </div>
+    <div class="nav-label">Foundations</div>
+    <button class="tab-btn active" data-tab="overview"><span class="num">00</span>Start here</button>
+    <button class="tab-btn" data-tab="rl"><span class="num">01</span>The RL loop</button>
+    <button class="tab-btn" data-tab="advantage"><span class="num">02</span>Policy gradients</button>
+    <div class="nav-label">PPO</div>
+    <button class="tab-btn" data-tab="ppo"><span class="num">03</span>Clipped objective</button>
+    <button class="tab-btn" data-tab="ppo-worked"><span class="num">04</span>PPO worked example</button>
+    <div class="nav-label">GRPO</div>
+    <button class="tab-btn" data-tab="grpo"><span class="num">05</span>Group-relative idea</button>
+    <button class="tab-btn" data-tab="grpo-worked"><span class="num">06</span>GRPO worked example</button>
+    <div class="nav-label">Compare &amp; study</div>
+    <button class="tab-btn" data-tab="comparison"><span class="num">07</span>PPO vs GRPO</button>
+    <button class="tab-btn" data-tab="failures"><span class="num">08</span>Failure modes</button>
+    <button class="tab-btn" data-tab="revision"><span class="num">09</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">10</span>Papers &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20OneRec/">OneRec / DPO</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">PPO &amp; GRPO / Start here</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/PPO.pdf">PPO PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Policy optimization · classic RL to LLM reasoning</div>
+      <h1>Improve a policy without letting one batch move it too far.</h1>
+      <p class="lede">PPO and GRPO share the same clipped policy-ratio core. They differ mainly in how they estimate “better than expected”: PPO learns a value-function baseline; GRPO compares several outputs for the same prompt.</p>
+      <div class="meta-row"><span class="chip primary">policy gradient</span><span class="chip">importance ratio</span><span class="chip">clipped surrogate</span><span class="chip">advantage</span><span class="chip">KL regularization</span></div>
+
+      <h2>The family resemblance</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Same proximal update, different baseline</strong><span>Conceptual comparison</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart TB
+  OLD["old policy samples actions / outputs"] --> REWARD["observe reward"]
+  REWARD --> PPOA["PPO advantage<br/>reward + learned value critic"]
+  REWARD --> GRPOA["GRPO advantage<br/>reward relative to prompt group"]
+  PPOA --> CLIP["clipped probability-ratio objective"]
+  GRPOA --> CLIP
+  CLIP --> NEW["updated policy"]
+  NEW --> OLD
+  class OLD,NEW param; class REWARD input; class PPOA,GRPOA route; class CLIP op;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f2e6cf,stroke:#8a5a16,stroke-width:2px;
+        </pre></div>
+        <figcaption>“Proximal” means the update is discouraged from exploiting stale rollout data by changing action probabilities too aggressively. Clipping is a heuristic local safeguard, not a proof that the new policy stays inside a global trust region.</figcaption>
+      </figure>
+
+      <div class="grid3">
+        <div class="concept"><h3>Policy ratio</h3><p>Ask how much more or less likely the new policy makes an action sampled by the old policy.</p></div>
+        <div class="concept"><h3>Advantage</h3><p>Ask whether that sampled action or output was better or worse than an appropriate baseline.</p></div>
+        <div class="concept"><h3>Clipping</h3><p>Remove extra incentive once a probability change already improves the objective beyond a chosen range.</p></div>
+      </div>
+
+      <h2>One equation to recognize</h2>
+      <div class="math"><span class="label">Shared clipped term</span>\[\min\!\left(rA,\operatorname{clip}(r,1-\epsilon,1+\epsilon)A\right),\qquad r=\frac{\pi_\theta(a\mid s)}{\pi_{old}(a\mid s)}\]</div>
+      <p>If \(A&gt;0\), increase the sampled action’s probability—but stop rewarding increases above \(1+\epsilon\). If \(A&lt;0\), decrease its probability—but stop rewarding decreases below \(1-\epsilon\). The minimum creates a pessimistic surrogate in both cases.</p>
+
+      <div class="procon">
+        <div class="pros"><h3>PPO baseline</h3><ul><li>Learn \(V(s)\), expected future return from each state.</li><li>Use temporal-difference residuals and GAE.</li><li>Natural for multi-step environments with dense or delayed rewards.</li></ul></div>
+        <div class="cons" style="border-top-color:var(--accent)"><h3>GRPO baseline</h3><ul><li>Sample a group of outputs for the same prompt.</li><li>Standardize rewards within that group.</li><li>Avoid a separate value model, especially attractive for large LLMs.</li></ul></div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>PPO asks “better than my critic expected?” GRPO asks “better than the other answers to this same prompt?” Both then apply a clipped likelihood-ratio update.</p></div>
+
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Proximal Policy Optimization Algorithms</strong>Schulman et al., 2017</div><div class="paper-links"><a href="papers/PPO.pdf">Local PDF</a><a href="https://arxiv.org/abs/1707.06347">arXiv</a></div></div>
+        <div class="paper"><div><strong>DeepSeekMath: GRPO introduction</strong>Shao et al., 2024</div><div class="paper-links"><a href="papers/DeepSeekMath-GRPO.pdf">Local PDF</a><a href="https://arxiv.org/abs/2402.03300">arXiv</a></div></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="rl"><div class="page">
+      <div class="eyebrow">Foundation 1 · Agent and environment</div>
+      <h1>Reinforcement learning optimizes consequences.</h1>
+      <p class="lede">Supervised learning is given the desired action. Reinforcement learning receives a reward after acting and must infer which behavior made that outcome more likely.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>The interaction loop</strong><span>One environment step</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  S["state s_t"] --> P["policy pi_theta"]
+  P --> A["sample action a_t"]
+  A --> E["environment"]
+  E --> R["reward r_t"]
+  E --> SN["next state s_(t+1)"]
+  SN --> P
+  class S,SN input; class P param; class A op; class E route; class R output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#f2e6cf,stroke:#8a5a16,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The policy is stochastic: \(\pi_\theta(a\mid s)\) is a distribution. Sampling is what makes exploration possible and what lets the log-probability trick estimate gradients.</figcaption>
+      </figure>
+
+      <h2>Core objects</h2>
+      <div class="symbols">
+        <div class="symbol"><code>s_t</code>State: information available before action \(t\).</div>
+        <div class="symbol"><code>a_t</code>Action sampled from the policy.</div>
+        <div class="symbol"><code>r_t</code>Reward observed after the action.</div>
+        <div class="symbol"><code>πθ(a|s)</code>Parameterized stochastic policy.</div>
+        <div class="symbol"><code>G_t</code>Discounted return from time \(t\).</div>
+        <div class="symbol"><code>γ</code>Discount factor balancing near and distant reward.</div>
+      </div>
+
+      <div class="math"><span class="label">Return and objective</span>\[G_t=\sum_{k=0}^{T-t-1}\gamma^k r_{t+k},\qquad J(\theta)=\mathbb E_{\tau\sim\pi_\theta}[G_0]\]</div>
+
+      <h2>An LLM as an RL policy</h2>
+      <div class="table-wrap"><table><thead><tr><th>RL concept</th><th>Classic control</th><th>LLM reasoning</th></tr></thead><tbody>
+        <tr><td>Initial state</td><td>Robot sensor readings</td><td>Prompt \(q\)</td></tr>
+        <tr><td>State \(s_t\)</td><td>Current position/velocity</td><td>Prompt plus generated prefix \((q,o_{\lt t})\)</td></tr>
+        <tr><td>Action \(a_t\)</td><td>Motor torque</td><td>Next token \(o_t\)</td></tr>
+        <tr><td>Trajectory</td><td>Episode of states/actions</td><td>Complete response \(o=(o_1,\ldots,o_T)\)</td></tr>
+        <tr><td>Reward</td><td>Progress, energy, success</td><td>Correctness, format, preference, safety</td></tr>
+        <tr><td>Policy</td><td>Actor network</td><td>Autoregressive language model</td></tr>
+      </tbody></table></div>
+
+      <h2>Why credit assignment is hard</h2>
+      <p>A final answer reward arrives after hundreds or thousands of token actions. Which token deserved credit? A value function estimates future return at each partial state; GRPO instead gives tokens a relative output-level signal (or uses process rewards when available).</p>
+      <div class="callout red"><strong>Reward is not truth.</strong><p>The algorithm maximizes the implemented reward. If the verifier, reward model, or formatting rule is incomplete, the policy can find high-reward behavior that violates the intended goal.</p></div>
+    </div></section>
+
+    <section class="tab" id="advantage"><div class="page">
+      <div class="eyebrow">Foundation 2 · Direction of the update</div>
+      <h1>Advantage says what to reinforce.</h1>
+      <p class="lede">Raw return tells you how good an outcome was. Advantage asks how good it was relative to a baseline, reducing variance without changing the expected policy gradient.</p>
+
+      <h2>Policy-gradient identity</h2>
+      <div class="derivation">
+        <h3>From expected reward to a sample estimator</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[J(\theta)=\mathbb E_{\tau\sim\pi_\theta}[R(\tau)]\]</div><div class="step-explain"><strong>Objective.</strong>Choose parameters whose sampled trajectories have high expected reward.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\nabla_\theta J=\mathbb E\!\left[\sum_t\nabla_\theta\log\pi_\theta(a_t\mid s_t)G_t\right]\]</div><div class="step-explain"><strong>Log-derivative trick.</strong>Differentiate log action probabilities and weight them by observed return.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\nabla_\theta J=\mathbb E\!\left[\sum_t\nabla_\theta\log\pi_\theta(a_t\mid s_t)A_t\right]\]</div><div class="step-explain"><strong>Subtract a baseline.</strong>A state-dependent baseline reduces variance; canonically \(A(s,a)=Q(s,a)-V(s)\).</div></div>
+      </div>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Positive advantage</b>\[A_t>0\Rightarrow \text{increase }\log\pi_\theta(a_t\mid s_t)\]<p>The action beat the baseline.</p></div>
+        <div class="formula-card"><b>Negative advantage</b>\[A_t&lt;0\Rightarrow \text{decrease }\log\pi_\theta(a_t\mid s_t)\]<p>The action underperformed the baseline.</p></div>
+      </div>
+
+      <h2>PPO’s value-function route: GAE</h2>
+      <div class="derivation">
+        <h3>Generalized Advantage Estimation</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\delta_t=r_t+\gamma V_\psi(s_{t+1})-V_\psi(s_t)\]</div><div class="step-explain"><strong>One-step TD surprise.</strong>Did reward plus next-state value exceed the critic’s current prediction?</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\hat A_t=\sum_{\ell=0}^{T-t-1}(\gamma\lambda)^\ell\delta_{t+\ell}\]</div><div class="step-explain"><strong>Blend horizons.</strong>\(\lambda\) near 0 favors lower-variance short bootstrapping; \(\lambda\) near 1 approaches a longer Monte Carlo residual.</div></div>
+      </div>
+
+      <h2>Why reuse needs an importance ratio</h2>
+      <p>Rollouts were sampled under \(\pi_{old}\), but optimization changes the policy to \(\pi_\theta\). The ratio corrects how a sampled action’s likelihood changes:</p>
+      <div class="math"><span class="label">Per-sample likelihood ratio</span>\[r_t(\theta)=\frac{\pi_\theta(a_t\mid s_t)}{\pi_{old}(a_t\mid s_t)},\qquad r_t(\theta_{old})=1\]</div>
+      <div class="grid3">
+        <div class="metric"><b>r = 1</b><small>unchanged likelihood</small><p>New and old policies assign the sampled action the same probability.</p></div>
+        <div class="metric"><b>r &gt; 1</b><small>action is more likely</small><p>The update reinforces the sampled action.</p></div>
+        <div class="metric"><b>r &lt; 1</b><small>action is less likely</small><p>The update suppresses the sampled action.</p></div>
+      </div>
+
+      <div class="callout"><strong>The ratio and advantage must be read together.</strong><p>A ratio above one is desirable only for a positive-advantage action. For a negative-advantage action, the objective prefers a ratio below one.</p></div>
+    </div></section>
+
+    <section class="tab" id="ppo"><div class="page">
+      <div class="eyebrow">PPO · The proximal mechanism</div>
+      <h1>Clip the incentive, not the policy.</h1>
+      <p class="lede">PPO permits several minibatch epochs over one rollout batch. Its clipped surrogate prevents those repeated updates from receiving unlimited reward for pushing sampled action ratios farther in an already-helpful direction.</p>
+
+      <h2>The clipped surrogate</h2>
+      <div class="math"><span class="label">PPO-Clip · maximize</span>\[L^{CLIP}(\theta)=\hat{\mathbb E}_t\left[\min\!\left(r_t(\theta)\hat A_t,\operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat A_t\right)\right]\]</div>
+
+      <div class="interactive" data-ppo-demo>
+        <div class="interactive-head"><strong>Move the policy ratio</strong><span>Set the advantage sign and watch the pessimistic term.</span></div>
+        <div class="interactive-controls">
+          <label>Ratio (r): <b data-ratio>1.00</b> <input type="range" min="0" max="2" value="1" step="0.01" aria-label="Policy ratio"></label>
+          <label style="margin-left:14px">Advantage: <select aria-label="Advantage sign"><option value="1">+1 (good action)</option><option value="-1">−1 (bad action)</option></select></label>
+        </div>
+        <div class="interactive-body ratio-demo">
+          <svg class="plot" viewBox="0 0 390 260" role="img" aria-label="Clipped PPO objective plot">
+            <line class="plot-axis" x1="35" y1="130" x2="365" y2="130"></line>
+            <line class="plot-axis" x1="35" y1="20" x2="35" y2="245"></line>
+            <line class="plot-guide" x1="163" y1="20" x2="163" y2="245"></line>
+            <line class="plot-guide" x1="227" y1="20" x2="227" y2="245"></line>
+            <path class="plot-line" data-plot-raw d="M35 130 L355 20"></path>
+            <path class="plot-clip" data-plot-objective d="M35 130 L227 64 L355 64"></path>
+            <circle class="plot-dot" cx="195" cy="75" r="7"></circle>
+            <text x="151" y="255" font-size="10">0.8</text><text x="217" y="255" font-size="10">1.2</text><text x="350" y="145" font-size="10">ratio</text>
+          </svg>
+          <div class="ratio-readout"><h3>Per-sample terms</h3><p>Unclipped (rA)</p><b data-raw>1.00</b><p>Clipped-ratio term</p><b data-clipped>1.00</b><p>Minimum used</p><b data-objective>1.00</b><p class="plain-note" data-status>Gradient still has incentive here.</p></div>
+        </div>
+      </div>
+
+      <h2>Why the minimum handles both signs</h2>
+      <div class="table-wrap"><table><thead><tr><th>Advantage</th><th>Helpful movement</th><th>Where improvement is clipped</th><th>Where worsening is never clipped away</th></tr></thead><tbody>
+        <tr><td>\(A&gt;0\)</td><td>Increase action probability, \(r&gt;1\)</td><td>\(r&gt;1+\epsilon\)</td><td>If \(r&lt;1\), the lower raw term remains</td></tr>
+        <tr><td>\(A&lt;0\)</td><td>Decrease action probability, \(r&lt;1\)</td><td>\(r&lt;1-\epsilon\)</td><td>If \(r&gt;1\), the more negative raw term remains</td></tr>
+      </tbody></table></div>
+
+      <h2>Full actor-critic objective</h2>
+      <div class="math"><span class="label">Approximately maximize</span>\[L^{PPO}=\hat{\mathbb E}_t\left[L_t^{CLIP}-c_1\underbrace{(V_\psi(s_t)-V_t^{target})^2}_{\text{critic loss}}+c_2\underbrace{\mathcal H(\pi_\theta(\cdot\mid s_t))}_{\text{entropy bonus}}\right]\]</div>
+      <p>The policy term learns which actions to change; value loss trains the baseline; entropy discourages premature collapse. In implementations that minimize a loss, signs are reversed accordingly.</p>
+
+      <h2>One PPO iteration</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Actor-critic training loop</strong><span>Roll out once, optimize K epochs</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  ACT["N actors run<br/>old policy for T steps"] --> BATCH["NT transitions"]
+  BATCH --> GAE["critic values + GAE<br/>advantages / returns"]
+  GAE --> MINI["shuffle minibatches"]
+  MINI --> LOSS["clip loss + value loss<br/>+ entropy"]
+  LOSS --> ADAM["Adam update"]
+  ADAM --> LOOP{"K epochs done?"}
+  LOOP -->|no| MINI
+  LOOP -->|yes| SNAP["old policy = new policy"]
+  SNAP --> ACT
+  class ACT input; class BATCH input; class GAE route; class MINI,LOSS op; class ADAM,SNAP param; class LOOP risk;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f2e6cf,stroke:#8a5a16,stroke-width:2px;
+  classDef risk fill:#f4e2df,stroke:#a23f35,stroke-width:2px;
+        </pre></div>
+        <figcaption>PPO’s key practical benefit is multiple first-order minibatch updates per rollout batch, avoiding TRPO’s constrained second-order optimization.</figcaption>
+      </figure>
+
+      <div class="callout red"><strong>Common misconception</strong><p>Clipping does not literally clamp model parameters, action probabilities, or KL divergence. It clips one sampled surrogate term when movement beyond the threshold would improve that term. Other samples and shared parameters can still move the overall policy substantially.</p></div>
+    </div></section>
+
+    <section class="tab" id="ppo-worked"><div class="page">
+      <div class="eyebrow">PPO · Numeric intuition</div>
+      <h1>Work both sides of the clip.</h1>
+      <p class="lede">Use \(\epsilon=0.2\), so the nominal ratio interval is \([0.8,1.2]\). We maximize the minimum term.</p>
+
+      <h2>Case A · Good action increased too much</h2>
+      <div class="derivation">
+        <h3>Given: \(\pi_{old}=0.25\) · \(\pi_\theta=0.35\) · \(\hat A=+2\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[r=0.35/0.25=1.4\]</div><div class="step-explain"><strong>The new policy is 40% more likely to choose this sampled action.</strong></div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[r\hat A=1.4(2)=2.8\]</div><div class="step-explain"><strong>Unclipped objective keeps rewarding the increase.</strong></div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\operatorname{clip}(r,0.8,1.2)\hat A=1.2(2)=2.4\]</div><div class="step-explain"><strong>Cap the improving surrogate at the upper ratio boundary.</strong></div></div>
+        <div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[\min(2.8,2.4)=2.4\]</div><div class="step-explain"><strong>No extra local incentive beyond 1.2.</strong>The sample’s clipped policy gradient is flat in this direction.</div></div>
+      </div>
+
+      <h2>Case B · Bad action decreased too much</h2>
+      <div class="derivation">
+        <h3>Given: \(\pi_{old}=0.50\) · \(\pi_\theta=0.35\) · \(\hat A=-1.5\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[r=0.35/0.50=0.70\]</div><div class="step-explain"><strong>The bad action is now 30% less likely.</strong>That direction is helpful because advantage is negative.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[r\hat A=0.70(-1.5)=-1.05\]</div><div class="step-explain"><strong>Unclipped term looks less negative—an objective improvement.</strong></div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\operatorname{clip}(r,0.8,1.2)\hat A=0.8(-1.5)=-1.20\]</div><div class="step-explain"><strong>For a negative advantage, multiplying flips the ordering.</strong>The clipped term is smaller.</div></div>
+        <div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[\min(-1.05,-1.20)=-1.20\]</div><div class="step-explain"><strong>The lower boundary removes extra reward for further suppression.</strong></div></div>
+      </div>
+
+      <h2>Case C · A harmful move is not protected</h2>
+      <p>Suppose \(\hat A=-1.5\) but the new policy increases the bad action to ratio \(r=1.4\):</p>
+      <div class="math"><span class="label">Pessimistic minimum</span>\[r\hat A=-2.10,\qquad \operatorname{clip}(r)\hat A=1.2(-1.5)=-1.80,\qquad \min=-2.10\]</div>
+      <p>The raw, more negative term remains. PPO does not clip away evidence that the update became worse.</p>
+
+      <h2>Batch effects</h2>
+      <div class="grid2">
+        <div class="note"><h3>One sample can be flat.</h3><p>Once clipped, that sample contributes no further improving gradient along its own ratio direction.</p></div>
+        <div class="note"><h3>The model can still move.</h3><p>Other samples share parameters and may update the same logits, so realized ratios can travel beyond the clip interval.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Sign check</h3><p>For a negative-advantage action, which ratio direction is good, and which clip boundary matters?</p><button data-answer="ppo-worked-q">Reveal answer</button><div class="answer" id="ppo-worked-q">A lower ratio is good because it suppresses the bad action. The lower boundary \(1-\epsilon\) removes extra incentive once the ratio becomes too small. The minimum handles the sign reversal automatically.</div></div>
+    </div></section>
+
+    <section class="tab" id="grpo"><div class="page">
+      <div class="eyebrow">GRPO · Replace the critic with peers</div>
+      <h1>One prompt creates its own baseline.</h1>
+      <p class="lede">GRPO samples (G) outputs for the same question, scores them, and standardizes rewards within that group. Better-than-group responses get positive advantage; worse-than-group responses get negative advantage.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>GRPO data flow</strong><span>No learned value model</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  Q["prompt q"] --> OLD["old policy"]
+  OLD --> O1["output o1"]
+  OLD --> O2["output o2"]
+  OLD --> OD["..."]
+  OLD --> OG["output oG"]
+  O1 --> RW["reward / verifier"]
+  O2 --> RW
+  OD --> RW
+  OG --> RW
+  RW --> GROUP["group mean + std<br/>relative advantages"]
+  GROUP --> LOSS["clipped token-ratio loss<br/>+ reference KL"]
+  LOSS --> NEW["updated policy"]
+  class Q input; class OLD,NEW param; class O1,O2,OD,OG op; class RW input; class GROUP route; class LOSS op;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f2e6cf,stroke:#8a5a16,stroke-width:2px;
+        </pre></div>
+        <figcaption>GRPO was introduced in DeepSeekMath as a PPO variant for mathematical reasoning. Its resource advantage comes from omitting a critic model comparable in size to the policy—not from eliminating rollout or reward computation.</figcaption>
+      </figure>
+
+      <h2>Group-relative advantage</h2>
+      <div class="derivation">
+        <h3>Outcome supervision</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[o_1,\ldots,o_G\sim\pi_{old}(\cdot\mid q)\]</div><div class="step-explain"><strong>Sample comparable responses.</strong>Every output answers the same prompt, controlling much of the difficulty variation.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[r_i=R(q,o_i),\qquad \mu_q=\frac1G\sum_i r_i,\qquad \sigma_q=\sqrt{\frac1G\sum_i(r_i-\mu_q)^2}\]</div><div class="step-explain"><strong>Build a prompt-local baseline and scale.</strong></div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\hat A_{i,t}=\frac{r_i-\mu_q}{\sigma_q}\quad\text{for every token }t\text{ in }o_i\]</div><div class="step-explain"><strong>Broadcast outcome credit.</strong>All tokens in a completion receive the same standardized final-reward advantage in the basic outcome version.</div></div>
+      </div>
+
+      <h2>GRPO objective</h2>
+      <div class="math"><span class="label">DeepSeekMath form · maximize</span>\[J_{GRPO}(\theta)=\mathbb E\!\left[\frac1G\sum_{i=1}^{G}\frac1{|o_i|}\sum_{t=1}^{|o_i|}\left(\min\!\left(r_{i,t}\hat A_{i,t},\operatorname{clip}(r_{i,t},1-\epsilon,1+\epsilon)\hat A_{i,t}\right)-\beta D_{KL}(\pi_\theta\|\pi_{ref})\right)\right]\]</div>
+      <div class="symbols">
+        <div class="symbol"><code>rᵢ,ₜ</code>\(\pi_\theta(o_{i,t}\mid q,o_{i,\lt t})/\pi_{old}(o_{i,t}\mid q,o_{i,\lt t})\).</div>
+        <div class="symbol"><code>πold</code>Policy snapshot that generated the group.</div>
+        <div class="symbol"><code>πref</code>Reference policy used to regularize drift.</div>
+        <div class="symbol"><code>G</code>Number of completions sampled per prompt.</div>
+        <div class="symbol"><code>β</code>Weight on reference-policy KL penalty.</div>
+        <div class="symbol"><code>|oᵢ|</code>Length normalization across response tokens.</div>
+      </div>
+
+      <h2>Sampled KL estimator</h2>
+      <div class="math"><span class="label">Per-token nonnegative estimator used in DeepSeekMath</span>\[D_{KL}(\pi_\theta\|\pi_{ref})\approx \frac{\pi_{ref}(o_t\mid s_t)}{\pi_\theta(o_t\mid s_t)}-\log\frac{\pi_{ref}(o_t\mid s_t)}{\pi_\theta(o_t\mid s_t)}-1\]</div>
+      <p>Unlike the PPO-for-RLHF pattern that folds token KL into the reward before advantage estimation, DeepSeekMath adds this estimator directly to the GRPO objective. That keeps group-relative reward normalization conceptually separate from reference regularization.</p>
+
+      <h2>Outcome vs process supervision</h2>
+      <div class="grid2">
+        <div class="concept"><h3>Outcome supervision</h3><p>One reward at response end; standardized reward is assigned to every token. Cheap and verifier-friendly, but credit is coarse.</p></div>
+        <div class="concept"><h3>Process supervision</h3><p>Reward reasoning steps, normalize process scores, and give each token the sum of subsequent normalized step rewards. Better credit requires a process reward model.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="grpo-worked"><div class="page">
+      <div class="eyebrow">GRPO · Numeric intuition</div>
+      <h1>Four answers define four relative advantages.</h1>
+      <p class="lede">Change the reward pattern to see why group diversity is the source of GRPO’s learning signal.</p>
+
+      <div class="interactive" data-grpo-demo>
+        <div class="interactive-head"><strong>Group reward normalizer</strong><span>One prompt, four sampled completions</span></div>
+        <div class="interactive-controls"><button class="demo-btn active" data-rewards="1,0,1,0">Two correct</button><button class="demo-btn" data-rewards="1,1,1,1">All correct</button><button class="demo-btn" data-rewards="0.1,0.2,0.7,1.0">Graded rewards</button></div>
+        <div class="interactive-body"><div class="group-samples"></div><p class="plain-note" data-group-summary></p></div>
+      </div>
+
+      <h2>Binary-reward calculation</h2>
+      <div class="derivation">
+        <h3>Rewards \([1,0,1,0]\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\mu=(1+0+1+0)/4=0.5\]</div><div class="step-explain"><strong>Prompt-local baseline.</strong>Half the sampled answers are correct.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\sigma=\sqrt{\tfrac14[(.5)^2+(-.5)^2+(.5)^2+(-.5)^2]}=0.5\]</div><div class="step-explain"><strong>Prompt-local scale.</strong></div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\hat A=[+1,-1,+1,-1]\]</div><div class="step-explain"><strong>Reinforce correct completions, suppress incorrect ones.</strong>All tokens in each output inherit its sign under outcome supervision.</div></div>
+      </div>
+
+      <h2>Add the clipped token update</h2>
+      <p>Take a token from correct output 1. Suppose its old probability is 0.20, new probability is 0.26, \(\hat A=+1\), and \(\epsilon=0.2\):</p>
+      <div class="math"><span class="label">Positive group-relative token</span>\[r=0.26/0.20=1.30,\qquad \min(1.30,1.20)(+1)=1.20\]</div>
+      <p>Now take a token from incorrect output 2 with old probability 0.40, new probability 0.28, and \(\hat A=-1\):</p>
+      <div class="math"><span class="label">Negative group-relative token</span>\[r=0.28/0.40=0.70,\qquad \min(0.70(-1),0.80(-1))=-0.80\]</div>
+
+      <h2>The all-equal edge case</h2>
+      <p>If every sampled completion gets reward 1, then \(\mu=1\) and \(\sigma=0\). Implementations add numerical stabilization, but the centered reward is still zero: the group provides no information about which response to prefer.</p>
+      <div class="callout red"><strong>Relative advantage needs within-group variation.</strong><p>Easy prompts where every output is correct and impossible prompts where every output is wrong can both waste a GRPO batch. This motivates appropriate task difficulty, sampling temperature, group size, and richer rewards.</p></div>
+
+      <h2>A subtler issue: “best of a bad group”</h2>
+      <div class="grid2">
+        <div class="note"><h3>Relative ranking is useful.</h3><p>It removes prompt difficulty: a reward of 0.4 may be excellent for a hard prompt and poor for an easy one.</p></div>
+        <div class="note"><h3>Relative ranking can mislead.</h3><p>If all outputs are bad but rewards vary, the least bad response gets positive advantage. Absolute reward filters or curriculum design may still be needed.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Reasoning check</h3><p>Does GRPO’s zero-mean group advantage mean the policy receives zero gradient?</p><button data-answer="grpo-worked-q">Reveal answer</button><div class="answer" id="grpo-worked-q">No. Advantages sum to zero across the group, but each is multiplied by a different output’s log-probability gradient. Positive and negative samples pull the policy in different directions. The gradient vanishes only in special cases, such as identical rewards/advantages or canceling gradients.</div></div>
+    </div></section>
+
+    <section class="tab" id="comparison"><div class="page">
+      <div class="eyebrow">Decision view</div>
+      <h1>PPO and GRPO solve different baseline problems.</h1>
+      <p class="lede">GRPO is best understood as a PPO-family specialization for settings where several comparable outputs can be sampled per prompt and a full critic is expensive.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Model and signal inventory</strong><span>LLM post-training view</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart TB
+  subgraph P["PPO"]
+    PP["policy"] --> PO["one or more outputs"] --> PR["reward"]
+    PV["value model"] --> PA["GAE advantages"]
+    PR --> PA
+    PA --> PL["clipped update"]
+  end
+  subgraph G["GRPO"]
+    GP["policy"] --> GO["group of outputs"] --> GR["group rewards"] --> GA["mean/std advantages"] --> GL["clipped update"]
+  end
+  PREF["reference policy"] --> PL
+  PREF --> GL
+  class PP,PV,GP,PREF param; class PO,GO input; class PR,GR input; class PA,GA route; class PL,GL op;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f2e6cf,stroke:#8a5a16,stroke-width:2px;
+        </pre></div>
+        <figcaption>The reward model/reference model details vary by implementation. The structural distinction is critic-based temporal advantage versus group-relative output advantage.</figcaption>
+      </figure>
+
+      <h2>Side-by-side</h2>
+      <div class="table-wrap"><table><thead><tr><th>Axis</th><th>PPO</th><th>GRPO</th></tr></thead><tbody>
+        <tr><td>Baseline</td><td>Learned state value \(V_\psi(s_t)\)</td><td>Mean reward of same-prompt output group</td></tr>
+        <tr><td>Advantage</td><td>Usually GAE over temporal rewards and critic values</td><td>Standardized group reward; outcome or process variant</td></tr>
+        <tr><td>Extra trained model</td><td>Critic/value model, often policy-scale for LLMs</td><td>No critic; still needs reward/verifier and often reference policy</td></tr>
+        <tr><td>Sampling</td><td>Environment trajectories; grouping not required</td><td>Several completions per prompt are essential</td></tr>
+        <tr><td>Credit resolution</td><td>Per state/token via \(V(s_t)\) and temporal residuals</td><td>Same terminal relative reward for all tokens unless process supervision is used</td></tr>
+        <tr><td>Memory</td><td>Higher due to value model and optimizer state</td><td>Lower trained-model memory; larger rollout group cost</td></tr>
+        <tr><td>Natural use case</td><td>General online RL, control, RLHF</td><td>LLM reasoning/RLVR with comparable prompt outputs</td></tr>
+        <tr><td>Shared core</td><td colspan="2">Old-policy likelihood ratio, clipped surrogate, repeated updates, and policy-drift control</td></tr>
+      </tbody></table></div>
+
+      <h2>Evidence from the primary papers</h2>
+      <div class="grid3">
+        <div class="metric"><b>2017</b><small>PPO introduced</small><p>Reported strong empirical balance across continuous-control and Atari tasks using first-order optimization.</p></div>
+        <div class="metric"><b>64</b><small>DeepSeekMath outputs per question</small><p>GRPO training used large same-question groups with reward-model scoring.</p></div>
+        <div class="metric"><b>51.7%</b><small>DeepSeekMath-RL 7B on MATH</small><p>Reported chain-of-thought accuracy after GRPO, from a strong instruct baseline and specialized data pipeline.</p></div>
+      </div>
+
+      <h2>DeepSeek-R1’s later comparison</h2>
+      <p>The DeepSeek-R1 paper reports that PPO underperformed GRPO with a common GAE setting (lambda=0.95), but approached GRPO when carefully tuned to (lambda=1.0) on its MATH comparison. Its argument for GRPO is therefore primarily practical: no value model and less tuning/compute in that large-model regime—not proof that PPO is fundamentally inferior.</p>
+
+      <div class="callout blue"><strong>Selection rule</strong><p>Use PPO when state-value estimation is meaningful and temporal credit matters. Consider GRPO when you can cheaply sample comparable groups, reward is mostly outcome-based, and a policy-scale critic is the dominant systems burden.</p></div>
+    </div></section>
+
+    <section class="tab" id="failures"><div class="page">
+      <div class="eyebrow">What breaks in practice</div>
+      <h1>Proximity is a tool, not a safety guarantee.</h1>
+      <p class="lede">Most failures come from one of four places: the reward is wrong, the advantage is noisy, the rollout is stale, or optimization pushes farther than the surrogate can reliably describe.</p>
+
+      <h2>Shared failure modes</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Reward hacking</b><span>The policy exploits verifier or reward-model blind spots instead of solving the intended task.</span></div>
+        <div class="caveat"><b>Policy collapse</b><span>Entropy falls, outputs become repetitive, and exploration disappears.</span></div>
+        <div class="caveat"><b>Stale rollouts</b><span>Too many epochs make data increasingly off-policy despite importance ratios.</span></div>
+        <div class="caveat"><b>Approximate trust region</b><span>Per-sample clipping does not cap total KL; shared parameters can move unsampled actions.</span></div>
+        <div class="caveat"><b>Length bias</b><span>Token averaging, cumulative KL, and terminal rewards can favor particular response lengths.</span></div>
+        <div class="caveat"><b>Reward scale drift</b><span>Changing reward distributions destabilize advantages and KL/entropy trade-offs.</span></div>
+      </div>
+
+      <h2>PPO-specific traps</h2>
+      <div class="grid2">
+        <div class="note"><h3>Critic error</h3><p>A biased or underfit value model corrupts every GAE estimate. Joint actor-critic training can also cause gradient interference in shared backbones.</p></div>
+        <div class="note"><h3>GAE sensitivity</h3><p>(gamma) and (lambda) govern a bias–variance trade-off; a setting that works for short control episodes may fail on long terminal-reward generations.</p></div>
+        <div class="note"><h3>Value clipping mismatch</h3><p>Some implementations clip value updates separately; this is not the core paper equation and can interact unexpectedly with reward normalization.</p></div>
+        <div class="note"><h3>Misread clip fraction</h3><p>A high fraction of clipped samples signals large updates or many epochs; it is diagnostic, not automatically good regularization.</p></div>
+      </div>
+
+      <h2>GRPO-specific traps</h2>
+      <div class="grid2">
+        <div class="note"><h3>Homogeneous groups</h3><p>All-equal rewards produce zero centered advantages and no useful relative signal.</p></div>
+        <div class="note"><h3>Small-group noise</h3><p>Mean and standard deviation are noisy when (G) is small; one outlier can set every advantage.</p></div>
+        <div class="note"><h3>Coarse token credit</h3><p>Outcome GRPO assigns the same advantage to every token, rewarding accidental or unnecessary reasoning along with decisive steps.</p></div>
+        <div class="note"><h3>Best-of-bad reinforcement</h3><p>Relative normalization can positively weight an output with low absolute quality because its peers are worse.</p></div>
+        <div class="note"><h3>Group sampling cost</h3><p>Removing the critic trades memory for multiple long completions and reward evaluations per prompt.</p></div>
+        <div class="note"><h3>Prompt-difficulty weighting</h3><p>Within-group standardization gives difficult and easy prompts similar normalized scale, which may or may not match training priorities.</p></div>
+      </div>
+
+      <h2>What to monitor</h2>
+      <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Healthy question</th><th>Warning sign</th></tr></thead><tbody>
+        <tr><td>Reward and held-out task metric</td><td>Do both improve?</td><td>Reward rises while real accuracy/safety falls</td></tr>
+        <tr><td>Approximate KL</td><td>Is policy drift controlled?</td><td>Rapid growth or oscillation</td></tr>
+        <tr><td>Entropy / output diversity</td><td>Is exploration retained?</td><td>Early collapse to one pattern</td></tr>
+        <tr><td>Clip fraction</td><td>How much data hits the plateau?</td><td>Most samples clipped for many updates</td></tr>
+        <tr><td>Advantage mean/std</td><td>Is signal normalized and varied?</td><td>Exploding scale or near-zero variation</td></tr>
+        <tr><td>GRPO homogeneous-group rate</td><td>Do groups contain comparisons?</td><td>Many all-correct or all-wrong prompts</td></tr>
+        <tr><td>PPO value loss / explained variance</td><td>Does the critic predict returns?</td><td>Persistent high error or negative explained variance</td></tr>
+      </tbody></table></div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>Rebuild both algorithms from six symbols.</h1>
+      <p class="lede">Know \(r\), \(A\), \(\epsilon\), \(V\), \(G\), and \(\beta\); the rest of the comparison follows.</p>
+
+      <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Meaning</th><th>PPO</th><th>GRPO</th></tr></thead><tbody>
+        <tr><td>\(r\)</td><td>new/old sampled-action probability ratio</td><td>Per environment action/token</td><td>Per output token</td></tr>
+        <tr><td>\(A\)</td><td>better or worse than baseline</td><td>GAE from rewards + value model</td><td>Reward standardized inside same-prompt group</td></tr>
+        <tr><td>\(\epsilon\)</td><td>clip half-width</td><td colspan="2">Improving ratio incentive plateaus outside \([1-\epsilon,1+\epsilon]\)</td></tr>
+        <tr><td>\(V\)</td><td>learned state value</td><td>Core critic baseline</td><td>Omitted</td></tr>
+        <tr><td>\(G\)</td><td>same-prompt group size</td><td>Not required</td><td>Defines relative baseline and variance</td></tr>
+        <tr><td>\(\beta\)</td><td>reference KL weight</td><td>Common in RLHF variants</td><td>Direct term in DeepSeekMath objective</td></tr>
+      </tbody></table></div>
+
+      <h2>Algorithms in one breath</h2>
+      <div class="grid2">
+        <div class="concept"><h3>PPO</h3><p>Roll out \(\pi_{old}\), fit/evaluate \(V\), compute GAE, optimize clipped policy + critic + entropy over several minibatch epochs, measure KL, then refresh the old policy.</p></div>
+        <div class="concept"><h3>GRPO</h3><p>For each prompt sample \(G\) outputs from \(\pi_{old}\), reward and standardize them within group, optimize the token-level clipped objective plus reference KL, then resample from a refreshed policy.</p></div>
+      </div>
+
+      <h2>Interview drill</h2>
+      <div class="grid2">
+        <div class="note"><h3>Why does PPO use min?</h3><p>It chooses the pessimistic clipped/unclipped term: improving movement plateaus, while worsening movement remains visible.</p></div>
+        <div class="note"><h3>Does clipping enforce KL?</h3><p>No. It clips sampled surrogate incentives; monitor or separately penalize KL for global drift.</p></div>
+        <div class="note"><h3>Why is advantage centered?</h3><p>A baseline removes common difficulty/reward scale and reduces gradient variance without changing the expected policy-gradient direction.</p></div>
+        <div class="note"><h3>What does GRPO save?</h3><p>A policy-scale value model and its optimizer/activation memory. It spends more on grouped rollouts instead.</p></div>
+        <div class="note"><h3>When does GRPO have no signal?</h3><p>When all group rewards are equal, centered advantages are zero.</p></div>
+        <div class="note"><h3>Why can PPO still match GRPO?</h3><p>A well-tuned critic/GAE can provide finer temporal credit; DeepSeek-R1 reports PPO approaching GRPO after tuning \(\lambda\) in its comparison.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Self-test</h3><p>1. Derive the policy-gradient estimator.<br>2. Explain PPO clipping for both advantage signs.<br>3. Derive GAE.<br>4. Derive GRPO group advantages.<br>5. Name three GRPO failure modes and three PPO failure modes.</p><button data-answer="rl-final">Reveal compact answers</button><div class="answer" id="rl-final">1. Use the log-derivative trick and subtract a baseline. 2. Positive \(A\): upper boundary; negative \(A\): lower boundary; min keeps harmful movement. 3. Sum discounted TD residuals \((\gamma\lambda)^\ell\delta_{t+\ell}\). 4. Sample same-prompt rewards and standardize by group mean/std. 5. GRPO: homogeneous groups, noisy small groups, coarse credit, best-of-bad, rollout cost; PPO: critic error, GAE sensitivity, value/policy interference, stale epochs, clip/KL misconception. Any precise three each suffice.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room</div>
+      <h1>Origins, introduction, and modern application.</h1>
+      <p class="lede">The guide uses the original PPO paper for the clipped objective, DeepSeekMath for GRPO’s formal introduction, and DeepSeek-R1 for its later large-scale use and direct PPO comparison.</p>
+
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Proximal Policy Optimization Algorithms</strong>John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, Oleg Klimov · 2017</div><div class="paper-links"><a href="papers/PPO.pdf">Local PDF</a><a href="https://arxiv.org/abs/1707.06347">arXiv</a></div></div>
+        <div class="paper"><div><strong>DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models</strong>Zhihong Shao et al. · 2024 · introduces GRPO</div><div class="paper-links"><a href="papers/DeepSeekMath-GRPO.pdf">Local PDF</a><a href="https://arxiv.org/abs/2402.03300">arXiv</a></div></div>
+        <div class="paper"><div><strong>DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning</strong>DeepSeek-AI · arXiv v2, January 2026</div><div class="paper-links"><a href="papers/DeepSeek-R1.pdf">Local PDF</a><a href="https://arxiv.org/abs/2501.12948">arXiv</a></div></div>
+      </div>
+
+      <h2>Suggested reading path</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · PPO §2–3</b><strong>Ratio and clipped surrogate</strong><p>Derive TRPO’s motivation, then inspect Figure 1 for positive and negative advantages.</p></div>
+        <div class="event"><b>2 · PPO §5</b><strong>Actor-critic algorithm</strong><p>Connect the clipped policy term to value loss, entropy, GAE, and repeated minibatch epochs.</p></div>
+        <div class="event"><b>3 · DeepSeekMath §4.1</b><strong>GRPO objective</strong><p>Read the model diagram, group advantage, direct KL estimator, and outcome/process variants together.</p></div>
+        <div class="event"><b>4 · DeepSeek-R1 Appendix A.3</b><strong>PPO comparison</strong><p>Inspect the value-model argument, KL placement, GAE (lambda) sensitivity, and the scope of the MATH experiment.</p></div>
+      </div>
+
+      <h2>Related guide</h2>
+      <div class="note"><h3>OneRec’s DPO alignment</h3><p>DPO uses winner/loser likelihood margins rather than a policy-gradient advantage. OneRec’s IPA mines those pairs from its current generator, making a useful contrast with GRPO’s reward-normalized groups.</p><a href="../ML%20-%20OneRec/#ipa">Open OneRec IPA</a></div>
+
+      <div class="callout"><strong>Accuracy note</strong><p>Core equations and reported settings were checked against the local primary PDFs. Numeric clip/group examples are original teaching calculations. PPO and GRPO implementation variants differ; any deviation from the paper equations should be labeled explicitly in code.</p></div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+</body>
+</html>

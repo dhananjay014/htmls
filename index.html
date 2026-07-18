@@ -3,13 +3,52 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=ML%20-%20Feature%20Interactions/">
-  <title>Feature Interactions</title>
-  <script>
-    location.replace('./ML%20-%20Feature%20Interactions/' + location.search + location.hash);
-  </script>
+  <meta name="description" content="Visual, mathematical field guides to recommendation systems, multimodal learning, and reinforcement learning.">
+  <title>Machine Learning Field Guides</title>
+  <link rel="stylesheet" href="assets/guide.css">
 </head>
-<body>
-  <p><a href="ML%20-%20Feature%20Interactions/">Open the Feature Interactions guide</a></p>
+<body style="--accent:#176b52;--accent-dark:#104b3a;--accent-soft:#dcece5">
+  <main class="library">
+    <div class="library-inner">
+      <div class="eyebrow">From first principles to paper details</div>
+      <h1>Machine learning field guides.</h1>
+      <p class="lede">Visual, mathematical, and interview-ready explainers. Each guide includes primary papers for offline reading, computation graphs, worked examples, implementation traps, and evidence caveats.</p>
+      <div class="meta-row"><span class="chip primary">intuition first</span><span class="chip">exact equations</span><span class="chip">interactive figures</span><span class="chip">responsive</span><span class="chip">print friendly</span></div>
+
+      <div class="library-grid">
+        <a class="guide-card feature" href="ML%20-%20Feature%20Interactions/">
+          <div><span class="num">GUIDE 01 · MODEL FAMILY</span><h2>Feature Interactions</h2><p>FM, Wide &amp; Deep, DeepFM, xDeepFM, DCN v1/v2, AutoInt, DHEN, and Wukong—from pairwise factors to scalable high-order interaction stacks.</p></div>
+          <span class="open">Open the original guide →</span>
+        </a>
+
+        <a class="guide-card" href="ML%20-%20HSTU/" style="--accent:#176b52">
+          <div><span class="num">GUIDE 02 · GENERATIVE RECOMMENDATION</span><h2>HSTU</h2><p>Reframe ranking and retrieval as sequential transduction; derive pointwise attention, gated HSTU layers, Stochastic Length, M-FALCON, and the scaling evidence.</p></div>
+          <span class="open">Open HSTU →</span>
+        </a>
+
+        <a class="guide-card" href="ML%20-%20Semantic%20IDs/" style="--accent:#5b4a91">
+          <div><span class="num">GUIDE 03 · ITEM TOKENIZATION</span><h2>Semantic IDs</h2><p>Build RQ-VAE codes and TIGER generative retrieval from scratch, then stress-test the discrete bottleneck with the 2026 model-scaling study.</p></div>
+          <span class="open">Open Semantic IDs →</span>
+        </a>
+
+        <a class="guide-card" href="ML%20-%20Multimodal%20MMoE/" style="--accent:#a04b3e">
+          <div><span class="num">GUIDE 04 · MULTIMODAL LEARNING</span><h2>Multimodal MMoE</h2><p>Separate redundant, unique, and synergistic interactions; derive the categorizer, specialized experts, learned router, and oracle-routing gap.</p></div>
+          <span class="open">Open Multimodal MMoE →</span>
+        </a>
+
+        <a class="guide-card" href="ML%20-%20OneRec/" style="--accent:#24617a">
+          <div><span class="num">GUIDE 05 · END-TO-END RECOMMENDATION</span><h2>OneRec</h2><p>Unify retrieve and rank with balanced semantic codes, session-wise generation, sparse decoder experts, a personalized reward model, and iterative DPO.</p></div>
+          <span class="open">Open OneRec →</span>
+        </a>
+
+        <a class="guide-card" href="RL%20-%20PPO%20and%20GRPO/" style="--accent:#8a5a16">
+          <div><span class="num">GUIDE 06 · REINFORCEMENT LEARNING</span><h2>PPO &amp; GRPO</h2><p>Derive policy gradients, advantage estimation, the clipped surrogate, critic-based PPO, group-relative GRPO, numeric updates, and failure modes.</p></div>
+          <span class="open">Open PPO &amp; GRPO →</span>
+        </a>
+      </div>
+
+      <p class="library-foot">Primary-paper claims are qualified to their reported datasets and systems. Worked examples are labeled when they are original teaching constructions.</p>
+    </div>
+  </main>
 </body>
 </html>

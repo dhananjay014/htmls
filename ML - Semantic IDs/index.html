@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and mathematical guide to Semantic IDs, RQ-VAE, TIGER, and their scaling limits.">
+  <title>Semantic IDs · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="../assets/guide.css">
+</head>
+<body data-guide-title="Semantic IDs" style="--accent:#5b4a91;--accent-dark:#3f3269;--accent-soft:#e9e3f3">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">ID</span><span>Semantic IDs</span></div>
+      <p>How item meaning becomes discrete tokens—and where that compression can bottleneck scale.</p>
+    </div>
+    <div class="nav-label">Build the idea</div>
+    <button class="tab-btn active" data-tab="overview"><span class="num">00</span>Start here</button>
+    <button class="tab-btn" data-tab="why"><span class="num">01</span>Why tokenize items?</button>
+    <button class="tab-btn" data-tab="rqvae"><span class="num">02</span>RQ-VAE math</button>
+    <button class="tab-btn" data-tab="tiger"><span class="num">03</span>TIGER pipeline</button>
+    <div class="nav-label">Reason with it</div>
+    <button class="tab-btn" data-tab="worked"><span class="num">04</span>Worked quantization</button>
+    <button class="tab-btn" data-tab="scaling"><span class="num">05</span>Scaling bottleneck</button>
+    <button class="tab-btn" data-tab="alternatives"><span class="num">06</span>SID vs text generation</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">07</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">08</span>Papers &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20OneRec/">OneRec companion</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">Semantic IDs / Start here</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/Generative-Retrieval.pdf">TIGER PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Generative retrieval · mechanism + critique</div>
+      <h1>Give every item a short semantic address.</h1>
+      <p class="lede">A Semantic ID replaces one arbitrary item token with a short sequence of learned codewords. Similar items can share a prefix, and a recommender can generate the next item token by token—but every compression creates an information bottleneck.</p>
+      <div class="meta-row"><span class="chip primary">discrete item tokens</span><span class="chip">residual quantization</span><span class="chip">autoregressive retrieval</span><span class="chip">hierarchical prefixes</span><span class="chip">scaling trade-off</span></div>
+      <div class="hero-rule"></div>
+
+      <h2>The idea in one line</h2>
+      <div class="math"><span class="label">Dense meaning → discrete address</span>\[\text{“orange running shoe”}\ \xrightarrow{\text{encoder}}\ z\in\mathbb{R}^d\ \xrightarrow{\text{residual quantizer}}\ (c_1,c_2,c_3)=(5,25,55)\]</div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Two models, two jobs</strong><span>Tokenizer is trained before recommender</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  META["Item title, brand,<br/>category, image"] --> ENC["Frozen modality<br/>encoder"]
+  ENC --> QT["Trainable residual<br/>quantizer"]
+  QT --> SID["Semantic ID<br/>(5,25,55,0)"]
+  SID --> HIST["User sequence of<br/>Semantic IDs"]
+  HIST --> REC["Generative<br/>recommender"]
+  REC --> NEXT["Next Semantic ID"]
+  NEXT --> LOOK["Catalog lookup<br/>real item"]
+  class META,HIST input; class ENC,QT param; class SID,REC op; class NEXT,LOOK output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#e9e3f3,stroke:#5b4a91,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>TIGER uses content to build IDs, then learns collaborative sequence patterns over those IDs. The quantizer is not the recommender; it defines the vocabulary the recommender must use.</figcaption>
+      </figure>
+
+      <div class="grid3">
+        <div class="concept"><h3>Compact vocabulary</h3><p>With (m) codebooks of size (K), the combinatorial address space is (K^m), while the output vocabulary only needs roughly (mK) position-specific code tokens.</p></div>
+        <div class="concept"><h3>Shared prefixes</h3><p>Items with similar content can reuse early codewords, allowing parameter sharing and coarse-to-fine generation.</p></div>
+        <div class="concept"><h3>Valid-item decoding</h3><p>Beam search follows code prefixes; a catalog lookup or trie maps completed IDs back to actual items.</p></div>
+      </div>
+
+      <h2>The central tension</h2>
+      <div class="procon">
+        <div class="pros"><h3>Why Semantic IDs are attractive</h3><ul><li>Short outputs and efficient inference.</li><li>Content-aware sharing across related items.</li><li>Natural generative retrieval without ANN search.</li><li>Useful cold-start and controllable-diversity behavior in TIGER’s experiments.</li></ul></div>
+        <div class="cons"><h3>Why they can saturate</h3><ul><li>Quantization discards dense semantic detail.</li><li>More codebooks make sequences longer and learning harder.</li><li>Larger codebooks create harder token classification.</li><li>A bigger upstream encoder cannot help if its extra information is lost at the code boundary.</li></ul></div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>Semantic IDs trade a huge flat item vocabulary for a short compositional code. The same narrow code that makes generation efficient can cap how much item meaning reaches the recommender.</p></div>
+
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Recommender Systems with Generative Retrieval (TIGER)</strong>Rajput et al., NeurIPS 2023</div><div class="paper-links"><a href="papers/Generative-Retrieval.pdf">Local PDF</a><a href="https://arxiv.org/abs/2305.05065">arXiv</a></div></div>
+        <div class="paper"><div><strong>Understanding Generative Recommendation with Semantic IDs from a Model-scaling View</strong>Liu et al., KDD 2026</div><div class="paper-links"><a href="papers/Semantic-IDs-Scaling.pdf">Local PDF</a><a href="https://arxiv.org/abs/2509.25522">arXiv</a></div></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="why"><div class="page">
+      <div class="eyebrow">Step 1 · The representation problem</div>
+      <h1>Why not keep one ID per item?</h1>
+      <p class="lede">An atomic ID is perfectly unique but semantically empty. A dense embedding carries meaning but is awkward to generate. A Semantic ID aims to be discrete, compact, and meaning-aware at once.</p>
+
+      <h2>Three ways to name an item</h2>
+      <div class="table-wrap"><table><thead><tr><th>Representation</th><th>Example</th><th>What is shared?</th><th>Main serving pattern</th><th>Main weakness</th></tr></thead><tbody>
+        <tr><td>Atomic ID</td><td><code>item_847291</code></td><td>Nothing from the symbol itself</td><td>Embedding lookup or classification</td><td>New/rare items have little transferable structure</td></tr>
+        <tr><td>Dense embedding</td><td><code>[0.18, -0.42, …]</code></td><td>Geometric proximity</td><td>ANN / maximum inner product search</td><td>Requires an external index and fixed candidate geometry</td></tr>
+        <tr><td>Semantic ID</td><td><code>(5, 25, 55, 0)</code></td><td>Codewords and often prefixes</td><td>Autoregressive constrained decoding</td><td>Quantization can discard useful content detail</td></tr>
+        <tr><td>Text title</td><td><code>orange trail shoe</code></td><td>Language tokens and world knowledge</td><td>Constrained text generation</td><td>Longer, slower decoding; title ambiguity</td></tr>
+      </tbody></table></div>
+
+      <h2>Combinatorial capacity</h2>
+      <div class="derivation">
+        <h3>Why a small token vocabulary can name a large catalog</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[c_\ell\in\{1,\ldots,K_\ell\},\qquad \operatorname{SID}(i)=(c_1,\ldots,c_m)\]</div><div class="step-explain"><strong>Choose one code per level.</strong>Each position has its own codebook and semantic role.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[|\mathcal A|=\prod_{\ell=1}^{m}K_\ell\quad\text{possible tuples}\]</div><div class="step-explain"><strong>Multiply address capacity.</strong>Three 256-entry codebooks yield \(256^3\approx16.8\) million raw tuples.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[|\mathcal V_{tokens}|\approx\sum_{\ell=1}^{m}K_\ell\]</div><div class="step-explain"><strong>Add output tokens.</strong>If positions use distinct token ranges, the decoder classifies among roughly \(mK\) code tokens rather than every catalog item at once.</div></div>
+      </div>
+
+      <div class="callout red"><strong>Capacity is not utilization.</strong><p>\(K^m\) counts possible tuples, not how evenly a learned quantizer uses them. Codebook collapse, skewed clusters, invalid combinations, and collisions can leave much of the theoretical space unusable.</p></div>
+
+      <h2>What “semantic” means here</h2>
+      <p>In TIGER, item metadata is encoded by Sentence-T5 and then quantized. Similar dense content embeddings tend to select overlapping codewords. Residual quantization creates a coarse-to-fine construction: the first code captures a large component, later codes repair the remaining error.</p>
+      <div class="diagram">
+        <div class="diagram-head"><strong>Prefix sharing</strong><span>Illustrative hierarchy</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  R["root"] --> C5["5<br/>footwear"]
+  R --> C9["9<br/>beauty"]
+  C5 --> C25["25<br/>running"]
+  C5 --> C31["31<br/>formal"]
+  C25 --> C55["55<br/>orange trail"]
+  C25 --> C78["78<br/>red road"]
+  C31 --> C12["12<br/>black dress"]
+  class R input; class C5,C9 op; class C25,C31 route; class C55,C78,C12 output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef op fill:#e9e3f3,stroke:#5b4a91,stroke-width:2px;
+  classDef route fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <div class="diagram-caption">This is an intuition, not a guarantee that every learned code has a human-readable category. Code semantics are induced by geometry and reconstruction, not labeled ontology supervision.</div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="rqvae"><div class="page">
+      <div class="eyebrow">Step 2 · Build the tokenizer</div>
+      <h1>Residual quantization, one repair at a time.</h1>
+      <p class="lede">RQ-VAE encodes a dense item vector into a latent \(z\), approximates that latent as a sum of codebook vectors, and trains a decoder to reconstruct the original semantic embedding.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>RQ-VAE computation graph</strong><span>Residual shrinks left to right</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["content embedding x"] --> E["encoder E"] --> Z["latent z = r0"]
+  Z --> Q1["nearest code e(c1)<br/>residual r1"]
+  Q1 --> Q2["nearest code e(c2)<br/>residual r2"]
+  Q2 --> Q3["nearest code e(c3)<br/>residual r3"]
+  Q1 --> SUM["sum selected<br/>code vectors"]
+  Q2 --> SUM
+  Q3 --> SUM
+  SUM --> D["decoder D"] --> XR["reconstruction x-hat"]
+  class X input; class E,D param; class Z,Q1,Q2,Q3,SUM op; class XR output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#e9e3f3,stroke:#5b4a91,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Each level receives only the error left by previous levels. That is why early codes are usually coarser and later codes finer.</figcaption>
+      </figure>
+
+      <h2>Exact residual recursion</h2>
+      <div class="derivation">
+        <h3>For codebook \(C_\ell=\{e_k^{(\ell)}\}_{k=1}^{K}\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[z=E(x),\qquad r_0=z\]</div><div class="step-explain"><strong>Compress the content embedding.</strong>The encoder maps the upstream modality representation to the quantizer’s latent width.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[c_\ell=\arg\min_k\left\|r_{\ell-1}-e_k^{(\ell)}\right\|_2^2\]</div><div class="step-explain"><strong>Select the nearest repair.</strong>The integer \(c_\ell\) becomes one token of the Semantic ID.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[r_\ell=r_{\ell-1}-e_{c_\ell}^{(\ell)},\qquad \hat z=\sum_{\ell=1}^{m}e_{c_\ell}^{(\ell)}\]</div><div class="step-explain"><strong>Pass on only the residual.</strong>The selected vectors add up to the quantized latent.</div></div>
+        <div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[\hat x=D(\hat z)\]</div><div class="step-explain"><strong>Reconstruct semantic input.</strong>If \(\hat x\) matches \(x\), the tuple retained information the decoder needs.</div></div>
+      </div>
+
+      <h2>Training loss</h2>
+      <div class="math"><span class="label">TIGER RQ-VAE objective</span>\[\mathcal L(x)=\underbrace{\|x-\hat x\|_2^2}_{\text{reconstruction}}+\sum_{\ell=1}^{m}\left(\underbrace{\|\operatorname{sg}[r_{\ell-1}]-e_{c_\ell}^{(\ell)}\|_2^2}_{\text{move code toward residual}}+\beta\underbrace{\|r_{\ell-1}-\operatorname{sg}[e_{c_\ell}^{(\ell)}]\|_2^2}_{\text{commit encoder}}\right)\]</div>
+      <p>The stop-gradient operator \(\operatorname{sg}\) routes the two terms differently: one updates code vectors toward encoder residuals; the other makes encoder outputs commit to chosen codes. TIGER uses k-means initialization to reduce codebook collapse.</p>
+
+      <h2>Collisions and validity</h2>
+      <div class="grid2">
+        <div class="note"><h3>Collision</h3><p>Two catalog items can quantize to the same tuple. TIGER appends an extra disambiguation token: \((12,24,52,0)\) vs \((12,24,52,1)\).</p></div>
+        <div class="note"><h3>Invalid generation</h3><p>A decoder can emit a code tuple absent from the catalog. Constrained decoding, a prefix trie, or post-generation lookup/fallback keeps output on the item set.</p></div>
+      </div>
+
+      <div class="caveats">
+        <div class="caveat"><b>Codebook collapse</b><span>Many items choose a few codes; theoretical capacity goes unused.</span></div>
+        <div class="caveat"><b>Hourglass imbalance</b><span>Early unbalanced clusters can constrain every downstream residual branch.</span></div>
+        <div class="caveat"><b>Semantic loss</b><span>Low reconstruction error does not guarantee preservation of recommendation-relevant distinctions.</span></div>
+        <div class="caveat"><b>Frozen mismatch</b><span>A modality encoder optimized for language similarity may not align with collaborative preference similarity.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="tiger"><div class="page">
+      <div class="eyebrow">Step 3 · Generate recommendations</div>
+      <h1>TIGER turns retrieval into translation.</h1>
+      <p class="lede">The encoder reads a user token plus the Semantic IDs of interacted items. The decoder autoregressively emits the code sequence of the next item.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Transformer Index for GEnerative Recommenders</strong><span>Training path</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  U["hashed user token"] --> FLAT["flattened history<br/>u, c11,c12,c13, c21,..."]
+  H["chronological item<br/>Semantic IDs"] --> FLAT
+  FLAT --> EN["bidirectional<br/>Transformer encoder"]
+  BOS["BOS"] --> DE["causal<br/>Transformer decoder"]
+  EN --> DE
+  DE --> C1["next code c1"] --> C2["next code c2"] --> C3["next code c3"] --> C4["collision code"]
+  class U,H,BOS input; class EN,DE param; class FLAT,C1,C2,C3 op; class C4 output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#e9e3f3,stroke:#5b4a91,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>TIGER’s reported setup uses three 256-entry RQ levels plus a fourth collision token, position-specific token ranges, a 13M-parameter encoder-decoder model, and beam search at inference.</figcaption>
+      </figure>
+
+      <h2>Autoregressive objective</h2>
+      <div class="derivation">
+        <h3>Predict one codeword conditioned on prior codewords</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[H_u=[\operatorname{SID}(i_1),\ldots,\operatorname{SID}(i_n)]\]</div><div class="step-explain"><strong>Chronological context.</strong>Flatten each item’s tuple while retaining level-specific token identity.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[p(c_1,\ldots,c_m\mid H_u)=\prod_{\ell=1}^{m}p(c_\ell\mid H_u,c_{\lt\ell})\]</div><div class="step-explain"><strong>Coarse-to-fine decoding.</strong>Later code choices are conditioned on the generated prefix.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\mathcal L_{\text{NLL}}=-\sum_{\ell=1}^{m}\log p(c_\ell^*\mid H_u,c_{\lt\ell}^*)\]</div><div class="step-explain"><strong>Teacher-forced training.</strong>Cross-entropy teaches the ground-truth next item’s codes.</div></div>
+        <div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[\hat i=\operatorname{lookup}\!\left(\operatorname{beam}(p_\theta)\right)\]</div><div class="step-explain"><strong>Catalog-constrained inference.</strong>Beam search retains multiple likely prefixes; lookup maps valid completed IDs to items.</div></div>
+      </div>
+
+      <h2>Why generation can help</h2>
+      <div class="grid3">
+        <div class="concept"><h3>Shared statistical strength</h3><p>A rare item can borrow probability structure from popular items that share its early semantic codes.</p></div>
+        <div class="concept"><h3>No separate ANN index</h3><p>The Transformer parameters and valid-code trie jointly act as the retrieval mechanism.</p></div>
+        <div class="concept"><h3>Diversity control</h3><p>Changing how deep a prefix is fixed can keep category-level relevance while allowing finer branches to vary.</p></div>
+      </div>
+
+      <h2>TIGER’s reported public evidence</h2>
+      <div class="grid3">
+        <div class="metric"><b>+29.0%</b><small>NDCG@5 on Beauty</small><p>Relative to the listed second-best baseline in the paper’s Amazon setup.</p></div>
+        <div class="metric"><b>+21.2%</b><small>NDCG@5 on Toys</small><p>Relative improvement in the same benchmark protocol.</p></div>
+        <div class="metric"><b>3 × 256</b><small>main semantic code shape</small><p>Plus a fourth token used to ensure unique item lookup after collisions.</p></div>
+      </div>
+      <div class="callout"><strong>Benchmark qualification</strong><p>These are paper-specific offline results on three Amazon categories, not a universal ranking of architectures. Data preprocessing, baseline tuning, beam size, and code quality all matter.</p></div>
+    </div></section>
+
+    <section class="tab" id="worked"><div class="page">
+      <div class="eyebrow">Concrete pass · A 2D toy latent</div>
+      <h1>Quantize one item by hand.</h1>
+      <p class="lede">We will approximate \(z=(4.2,1.3)\) with one vector from each of three codebooks. The values are designed for teaching, not learned from either paper.</p>
+
+      <div class="interactive" data-choice-group>
+        <div class="interactive-head"><strong>Residual repair sequence</strong><span>Select a level to see what the next code explains.</span></div>
+        <div class="interactive-controls"><button class="choice-btn active" data-choice="l1">Level 1 · coarse</button><button class="choice-btn" data-choice="l2">Level 2 · refine</button><button class="choice-btn" data-choice="l3">Level 3 · finish</button></div>
+        <div class="interactive-body">
+          <div class="choice-panel active" data-choice-panel="l1"><div class="grid2"><div><h3>Input residual</h3><div class="math">\[r_0=(4.2,1.3)\]</div></div><div><h3>Nearest code</h3><div class="math">\[e_2^{(1)}=(4.0,0.0)\]</div></div></div><p>Code 2 captures the dominant x-direction. New residual: \(r_1=(0.2,1.3)\).</p></div>
+          <div class="choice-panel" data-choice-panel="l2"><div class="grid2"><div><h3>Input residual</h3><div class="math">\[r_1=(0.2,1.3)\]</div></div><div><h3>Nearest code</h3><div class="math">\[e_1^{(2)}=(0.0,1.0)\]</div></div></div><p>Code 1 repairs most of the y-direction. New residual: \(r_2=(0.2,0.3)\).</p></div>
+          <div class="choice-panel" data-choice-panel="l3"><div class="grid2"><div><h3>Input residual</h3><div class="math">\[r_2=(0.2,0.3)\]</div></div><div><h3>Nearest code</h3><div class="math">\[e_3^{(3)}=(0.25,0.25)\]</div></div></div><p>Code 3 handles fine detail. Final residual: \(r_3=(-0.05,0.05)\).</p></div>
+        </div>
+      </div>
+
+      <h2>Verify the reconstruction</h2>
+      <div class="derivation">
+        <h3>Semantic ID \((2,1,3)\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\hat z=(4,0)+(0,1)+(0.25,0.25)=(4.25,1.25)\]</div><div class="step-explain"><strong>Add selected code vectors.</strong>The integer tuple is a compact address for this sum.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[z-\hat z=(-0.05,0.05),\qquad \|z-\hat z\|_2^2=0.005\]</div><div class="step-explain"><strong>Measure quantization error.</strong>The decoder still has to map \(\hat z\) back toward the original content embedding \(x\).</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\operatorname{SID}(i)=(2,1,3,0)\]</div><div class="step-explain"><strong>Ensure uniqueness.</strong>If another item also gets \((2,1,3)\), assign it suffix 1, then 2, and so on.</div></div>
+      </div>
+
+      <h2>Now generate it</h2>
+      <div class="token-stream" style="overflow-x:auto">
+        <span class="token item">user history</span><span class="arrow">→</span><span class="token code">2<br><small>coarse</small></span><span class="arrow">→</span><span class="token code">1<br><small>refine</small></span><span class="arrow">→</span><span class="token code">3<br><small>fine</small></span><span class="arrow">→</span><span class="token target">0<br><small>item</small></span>
+      </div>
+      <p>The decoder never emits \((4.25,1.25)\). It emits token indices \((2,1,3,0)\). The catalog lookup recovers the item whose precomputed ID matches that tuple.</p>
+
+      <div class="quiz"><h3>Reasoning check</h3><p>If you double the number of codebooks, do you automatically preserve twice as much useful semantics?</p><button data-answer="sid-worked-q">Reveal answer</button><div class="answer" id="sid-worked-q">No. More codebooks increase representational capacity and sequence length, but they also make autoregressive learning harder. The 2026 scaling study found that increasing codebook count beyond its 3×256 setup generally failed to improve—and often reduced—recommendation performance.</div></div>
+    </div></section>
+
+    <section class="tab" id="scaling"><div class="page">
+      <div class="eyebrow">2026 audit · Where scale stops helping</div>
+      <h1>The narrow code can become the ceiling.</h1>
+      <p class="lede">Liu et al. separately scale the modality encoder, quantizer, and recommender. Their fixed-data experiments ask a sharp question: which component can convert more parameters into better recall?</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>The suspected information bottleneck</strong><span>Scaling before a lossy boundary may not transfer</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  LLM["Larger modality encoder<br/>77M to 11B"] --> DENSE["richer dense<br/>item embedding"]
+  DENSE --> BOT["fixed discrete SID<br/>quantization boundary"]
+  BOT --> RS["larger recommender<br/>0.3M to 3.1B"]
+  RS --> P["next-item prediction"]
+  LOST["semantic detail<br/>discarded here"] -.-> BOT
+  class LLM,RS param; class DENSE input; class BOT risk; class LOST risk; class P output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef risk fill:#f4e2df,stroke:#a23f35,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>If the code does not preserve an extra semantic distinction, neither a larger upstream encoder nor a larger downstream recommender can recover it from the tuple alone.</figcaption>
+      </figure>
+
+      <h2>Component-by-component findings</h2>
+      <div class="table-wrap"><table><thead><tr><th>Component scaled</th><th>Range studied</th><th>Reported behavior</th><th>Interpretation in this setup</th></tr></thead><tbody>
+        <tr><td>Transformer recommender \(N_{RS}\)</td><td>0.3M → 3.1B</td><td>Improves at small scale; quickly saturates beyond about 13M</td><td>More downstream capacity cannot recover information absent from the SID.</td></tr>
+        <tr><td>Decoder-only LLM recommender</td><td>0.6B → 14B</td><td>Marginal gains; inferior to the smaller Transformer RS</td><td>Changing backbone alone does not remove the discrete input/output bottleneck.</td></tr>
+        <tr><td>Frozen modality encoder \(N_{LLM}\)</td><td>Flan-T5 77M → 11B</td><td>Little to no recommendation gain</td><td>Extra encoder knowledge is not effectively transferred through the fixed SID path.</td></tr>
+        <tr><td>Codebook count</td><td>2 → 16 at size 256</td><td>Best around 3; further growth often degrades</td><td>Longer IDs increase autoregressive difficulty.</td></tr>
+        <tr><td>Codebook size</td><td>32 → 1024 with 3 levels</td><td>Best around 256; larger sizes do not unlock scaling</td><td>Finer classification and sparse code usage offset theoretical capacity.</td></tr>
+      </tbody></table></div>
+
+      <h2>Diagnostic ablation</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Add collaborative embedding</b>\[e_i^{RS}\leftarrow e_i^{RS}+g(e_i^{CF})\]<p>Little gain: the SID-based recommender already captured much of the interaction signal in this experiment.</p></div>
+        <div class="formula-card"><b>Add dense LLM embedding</b>\[e_i^{RS}\leftarrow e_i^{RS}+g(e_i^{LLM})\]<p>Substantial gain: bypassing the discrete code restored item-semantic information.</p></div>
+      </div>
+      <div class="callout"><strong>The strongest evidence is the bypass.</strong><p>When direct LLM embeddings improve the same recommender but larger encoders filtered through SIDs do not, the authors infer that the SID path—not simply insufficient downstream capacity—is the semantic bottleneck.</p></div>
+
+      <h2>Scope of the conclusion</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Fixed data budget</b><span>The scaling curves hold training data constant; joint data-model scaling may behave differently.</span></div>
+        <div class="caveat"><b>Specific instantiation</b><span>Results use residual quantization over text encodings and selected RS backbones, not every possible discrete tokenizer.</span></div>
+        <div class="caveat"><b>Academic datasets</b><span>Amazon Beauty, Sports, and Toys are far smaller and cleaner than many industrial catalogs.</span></div>
+        <div class="caveat"><b>Text-only content</b><span>The study does not establish the same curves for image, audio, or jointly multimodal item tokenizers.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="alternatives"><div class="page">
+      <div class="eyebrow">Design decision · Compression or open vocabulary</div>
+      <h1>Semantic IDs win efficiency; text wins scaling in the tested regime.</h1>
+      <p class="lede">The 2026 paper compares SID-based generation with an LLM that reads and emits item titles directly. Neither dominates every operating point.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Two generative retrieval paths</strong><span>Same goal, different bottleneck</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart TB
+  H["user item history"] --> S1["short SID sequence"] --> T1["small Transformer"] --> O1["4 code tokens"]
+  H --> S2["full item titles"] --> T2["frozen LLM + LoRA"] --> O2["constrained title tokens"]
+  O1 --> C["catalog item"]
+  O2 --> C
+  class H input; class S1,S2 op; class T1,T2 param; class O1,O2 route; class C output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#e9e3f3,stroke:#5b4a91,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The text model uses a trie during constrained beam search so it emits only catalog titles. This preserves open-world language representations but requires more decoding work.</figcaption>
+      </figure>
+
+      <h2>Decision table</h2>
+      <div class="table-wrap"><table><thead><tr><th>Axis</th><th>SID-based GR</th><th>Text-based GR / LLM-as-RS</th></tr></thead><tbody>
+        <tr><td>Item output length</td><td>Usually a few code tokens</td><td>Full title, often many subword tokens</td></tr>
+        <tr><td>Inference cost</td><td>Substantially lower in the paper’s comparison</td><td>Higher autoregressive latency and memory</td></tr>
+        <tr><td>Semantic channel</td><td>Quantized finite code</td><td>Direct language tokens and pretrained knowledge</td></tr>
+        <tr><td>Scaling in tested range</td><td>Quick saturation</td><td>Consistent gains from 0.6B to 14B with no observed saturation</td></tr>
+        <tr><td>Best regime in study</td><td>Limited compute / latency budget</td><td>Performance priority with sufficient resources</td></tr>
+        <tr><td>Cold-start Recall@10</td><td>Lower on all three datasets</td><td>Higher on Beauty, Sports, and Toys</td></tr>
+      </tbody></table></div>
+
+      <h2>Reported text-model findings</h2>
+      <div class="grid3">
+        <div class="metric"><b>up to 20%</b><small>performance improvement</small><p>Text-based GR over the best observed SID-based result through scaling in the paper’s experiments.</p></div>
+        <div class="metric"><b>0.6B → 14B</b><small>Qwen3 backbone range</small><p>Frozen LLM size and trainable LoRA size both showed fitted scaling behavior.</p></div>
+        <div class="metric"><b>4 IDs</b><small>SID output length</small><p>The main reason SID inference remains far cheaper than generating complete titles.</p></div>
+      </div>
+
+      <h2>A more useful conclusion than “SIDs are dead”</h2>
+      <div class="callout blue"><strong>Choose the information budget deliberately.</strong><p>SIDs remain compelling when catalog scale and latency demand compact outputs. The research challenge is to increase retained task-relevant semantics without losing their systems advantage—through better tokenizers, hybrid dense features, multimodal codes, or adaptive code capacity.</p></div>
+      <div class="grid2">
+        <div class="note"><h3>Hybrid path</h3><p>Keep SIDs for decoding efficiency, then inject dense semantic features into the recommender or reranker where the budget allows.</p></div>
+        <div class="note"><h3>Tokenizer redesign path</h3><p>Optimize codes for both content reconstruction and collaborative recommendation, not only frozen-encoder geometry.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>Semantic IDs in ten lines.</h1>
+      <p class="lede">Reconstruct the pipeline from item metadata to catalog lookup, then explain exactly where information can be lost.</p>
+
+      <div class="table-wrap"><table><thead><tr><th>Concept</th><th>Memory hook</th><th>Precise detail</th></tr></thead><tbody>
+        <tr><td>Atomic ID problem</td><td>Unique but meaningless</td><td>No compositional sharing for related or unseen items.</td></tr>
+        <tr><td>Semantic ID</td><td>Short semantic address</td><td>A tuple with one discrete code per codebook level.</td></tr>
+        <tr><td>Capacity</td><td>Multiply tuples, add tokens</td><td>\(\prod K_\ell\) possible addresses; roughly \(\sum K_\ell\) output symbols.</td></tr>
+        <tr><td>RQ-VAE</td><td>Repair the residual</td><td>Each code approximates what earlier levels left unexplained.</td></tr>
+        <tr><td>Quantized latent</td><td>Add selected vectors</td><td>\(\hat z=\sum_\ell e_{c_\ell}^{(\ell)}\).</td></tr>
+        <tr><td>Training</td><td>Reconstruct + commit</td><td>Reconstruction, codebook, and encoder commitment losses with stop-gradient routing.</td></tr>
+        <tr><td>TIGER</td><td>Translate history into next ID</td><td>Encoder-decoder Transformer generates next-item codes autoregressively.</td></tr>
+        <tr><td>Collision</td><td>Append identity suffix</td><td>Shared semantic tuple gets an extra unique token for catalog lookup.</td></tr>
+        <tr><td>Scaling limit</td><td>The code is the neck</td><td>More upstream/downstream parameters cannot use semantic detail discarded by quantization.</td></tr>
+        <tr><td>Text alternative</td><td>More meaning, more latency</td><td>Direct title generation scaled better but decoded many more tokens.</td></tr>
+      </tbody></table></div>
+
+      <h2>Interview drill</h2>
+      <div class="grid2">
+        <div class="note"><h3>RQ-VAE vs product quantization?</h3><p>RQ-VAE repeatedly quantizes the residual in the same latent space, giving an additive coarse-to-fine approximation; product quantization partitions dimensions into independent subspaces.</p></div>
+        <div class="note"><h3>Why not use one giant codebook?</h3><p>Parameter/search cost and sparse usage grow; multiple smaller codebooks provide combinatorial capacity and an autoregressive prefix structure.</p></div>
+        <div class="note"><h3>What causes invalid IDs?</h3><p>The product space contains tuples no catalog item uses. Constrained decoding or a trie blocks invalid prefixes; fallback lookup can handle the rest.</p></div>
+        <div class="note"><h3>Why can cold start improve?</h3><p>A new item can receive codes shared with semantically related trained items, transferring probability structure before much interaction data accrues.</p></div>
+        <div class="note"><h3>Why did encoder scaling fail?</h3><p>In the 2026 setup, richer dense embeddings were compressed into SIDs that did not preserve the extra useful semantics; direct embedding injection restored gains.</p></div>
+        <div class="note"><h3>Are text models always better?</h3><p>No. They scaled better in the reported regime but had much higher inference cost. SIDs remained favorable under tight budgets.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Self-test</h3><p>1. Derive residual quantization.<br>2. Explain \(K^m\) versus \(mK\).<br>3. Describe TIGER training and inference.<br>4. Name two SID failure modes.<br>5. Explain the 2026 bottleneck ablation.</p><button data-answer="sid-final">Reveal compact answers</button><div class="answer" id="sid-final">1. Choose the nearest code to \(r_{\ell-1}\), subtract it, repeat, and sum selected code vectors. 2. Tuples multiply but token inventories add. 3. Encode flattened history, teacher-force next ID codes, then constrained beam search and lookup. 4. Any two of collapse, collisions, invalid tuples, semantic loss, imbalance, longer-code difficulty. 5. Direct LLM embeddings improved the RS while larger encoders routed through the SID did not, isolating the discrete path as the likely semantic bottleneck.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room</div>
+      <h1>Read the proposal, then the stress test.</h1>
+      <p class="lede">The two papers are most useful as a pair: TIGER explains why Semantic IDs are powerful; the scaling study reveals where their mainstream construction stops converting capacity into quality.</p>
+
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Recommender Systems with Generative Retrieval</strong>Shashank Rajput et al. · NeurIPS 2023 · arXiv v3</div><div class="paper-links"><a href="papers/Generative-Retrieval.pdf">Local PDF</a><a href="https://arxiv.org/abs/2305.05065">arXiv</a></div></div>
+        <div class="paper"><div><strong>Understanding Generative Recommendation with Semantic IDs from a Model-scaling View</strong>Jingzhe Liu et al. · KDD 2026 · arXiv v3, June 2026</div><div class="paper-links"><a href="papers/Semantic-IDs-Scaling.pdf">Local PDF</a><a href="https://arxiv.org/abs/2509.25522">arXiv</a></div></div>
+      </div>
+
+      <h2>Suggested reading path</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · TIGER §3.1</b><strong>Semantic ID generation</strong><p>Follow Figure 3 and derive the residual, code selection, quantized sum, and stop-gradient loss.</p></div>
+        <div class="event"><b>2 · TIGER §3.2–4.3</b><strong>Generative retrieval and capabilities</strong><p>Separate the tokenizer, recommender, beam search, cold-start analysis, and diversity mechanism.</p></div>
+        <div class="event"><b>3 · Scaling paper §3</b><strong>Scale each module independently</strong><p>Track \(N_{RS}\), \(N_{LLM}\), and \(N_{QT}\); do not mix their effects.</p></div>
+        <div class="event"><b>4 · Scaling paper §3.4–6</b><strong>Bypass and alternative</strong><p>Understand the direct-embedding ablation, Text-based GR scaling, compute trade-off, and cold-start test.</p></div>
+      </div>
+
+      <h2>Companion guides</h2>
+      <div class="grid2">
+        <div class="note"><h3>OneRec</h3><p>See how an industrial model uses balanced residual k-means IDs, session-wise generation, sparse MoE, and iterative preference alignment.</p><a href="../ML%20-%20OneRec/">Open OneRec</a></div>
+        <div class="note"><h3>HSTU</h3><p>Contrast Semantic-ID generation with atomic-ID generative recommendation over long behavior sequences.</p><a href="../ML%20-%20HSTU/">Open HSTU</a></div>
+      </div>
+      <div class="callout"><strong>Accuracy note</strong><p>Paper claims and equations were checked against the local PDFs. The 2D quantization vectors and human-readable prefix labels are original explanatory examples, not reported experiments.</p></div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+</body>
+</html>
