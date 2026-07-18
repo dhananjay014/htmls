@@ -18,7 +18,18 @@ for (const page of pages) {
   const html = readFileSync(absolutePage, "utf8");
   const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
   const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
-  const tabTargets = [...html.matchAll(/class="[^"]*\btab-btn\b[^"]*"[^>]*data-tab="([^"]+)"/g)].map((match) => match[1]);
+  const tabDefinitions = [...html.matchAll(/<button\b[^>]*>/g)]
+    .map((match) => match[0])
+    .filter((tag) => /\bclass="[^"]*\btab-btn\b[^"]*"/.test(tag))
+    .map((tag) => {
+      const key = tag.match(/\bdata-tab="([^"]+)"/)?.[1];
+      const grouped = tag.match(/\bdata-panels="([^"]+)"/)?.[1];
+      return key ? { key, panels: (grouped || key).split(",").map((panel) => panel.trim()).filter(Boolean) } : null;
+    })
+    .filter(Boolean);
+  const tabKeys = tabDefinitions.map((tab) => tab.key);
+  const duplicateTabKeys = [...new Set(tabKeys.filter((key, index) => tabKeys.indexOf(key) !== index))];
+  const tabTargets = tabDefinitions.flatMap((tab) => tab.panels);
   const panels = [...html.matchAll(/class="[^"]*\btab\b[^"]*"[^>]*id="([^"]+)"/g)].map((match) => match[1]);
   const missingTargets = tabTargets.filter((target) => !ids.includes(target));
   const orphanPanels = panels.filter((panel) => !tabTargets.includes(panel));
@@ -33,7 +44,7 @@ for (const page of pages) {
   }
 
   const report = {
-    tabs: tabTargets.length,
+    tabs: tabDefinitions.length,
     panels: panels.length,
     mermaid: (html.match(/class="mermaid"/g) || []).length,
     mathBlocks: (html.match(/class="math"/g) || []).length,
@@ -41,9 +52,9 @@ for (const page of pages) {
   };
   console.log(`${page}: ${JSON.stringify(report)}`);
 
-  if (duplicateIds.length || missingTargets.length || orphanPanels.length || badLinks.length) {
+  if (duplicateIds.length || duplicateTabKeys.length || missingTargets.length || orphanPanels.length || badLinks.length) {
     failed = true;
-    console.error(JSON.stringify({ duplicateIds, missingTargets, orphanPanels, badLinks }, null, 2));
+    console.error(JSON.stringify({ duplicateIds, duplicateTabKeys, missingTargets, orphanPanels, badLinks }, null, 2));
   }
 }
 

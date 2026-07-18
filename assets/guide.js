@@ -31,10 +31,14 @@
     }
   });
 
-  function renderDiagrams(scope) {
-    if (!window.mermaid) return;
-    var nodes = Array.prototype.slice.call(scope.querySelectorAll(".mermaid:not([data-processed])"));
-    if (nodes.length) window.mermaid.run({ nodes: nodes });
+  function renderDiagrams(scopes) {
+    if (!window.mermaid) return Promise.resolve();
+    var roots = Array.isArray(scopes) ? scopes : [scopes];
+    var nodes = roots.reduce(function (all, scope) {
+      return all.concat(Array.prototype.slice.call(scope.querySelectorAll(".mermaid:not([data-processed])")));
+    }, []);
+    if (nodes.length) return window.mermaid.run({ nodes: nodes });
+    return Promise.resolve();
   }
 
   var buttons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
@@ -43,31 +47,84 @@
   var crumb = document.getElementById("crumb");
   var guideTitle = document.body.getAttribute("data-guide-title") || document.title;
 
+  function panelIdsFor(button) {
+    return (button.dataset.panels || button.dataset.tab)
+      .split(",")
+      .map(function (id) { return id.trim(); })
+      .filter(Boolean);
+  }
+
+  function buttonForId(id) {
+    return buttons.find(function (button) {
+      return button.dataset.tab === id || panelIdsFor(button).indexOf(id) !== -1;
+    });
+  }
+
+  function labelFor(button) {
+    return button.textContent.trim().replace(/^\d+\s*/, "");
+  }
+
+  buttons.forEach(function (button) {
+    button.addEventListener("click", function () { activate(button.dataset.tab, true); });
+  });
+
   if (select && buttons.length) {
     buttons.forEach(function (button) {
       var option = document.createElement("option");
       option.value = button.dataset.tab;
-      option.textContent = button.textContent.trim();
+      option.textContent = labelFor(button);
       select.appendChild(option);
-      button.addEventListener("click", function () { activate(button.dataset.tab, true); });
     });
     select.addEventListener("change", function () { activate(select.value, true); });
   }
 
   function activate(id, push) {
-    var target = document.getElementById(id);
-    if (!target) return;
-    buttons.forEach(function (button) { button.classList.toggle("active", button.dataset.tab === id); });
-    tabs.forEach(function (tab) { tab.classList.toggle("active", tab.id === id); });
-    if (select) select.value = id;
-    var selected = buttons.find(function (button) { return button.dataset.tab === id; });
-    var label = selected ? selected.textContent.trim().replace(/^\d+\s*/, "") : id;
+    var requested = document.getElementById(id);
+    var selected = buttonForId(id) || buttons[0];
+    if (!selected) return;
+    var panelIds = panelIdsFor(selected);
+    var activeTabs = tabs.filter(function (tab) { return panelIds.indexOf(tab.id) !== -1; });
+    if (!activeTabs.length) return;
+
+    buttons.forEach(function (button) {
+      var isActive = button === selected;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-current", isActive ? "page" : "false");
+    });
+    tabs.forEach(function (tab) {
+      tab.classList.remove("active", "group-member", "group-start", "group-end");
+      tab.setAttribute("aria-hidden", "true");
+    });
+    activeTabs.forEach(function (tab, index) {
+      tab.classList.add("active");
+      tab.setAttribute("aria-hidden", "false");
+      if (activeTabs.length > 1) {
+        tab.classList.add("group-member");
+        if (index === 0) tab.classList.add("group-start");
+        if (index === activeTabs.length - 1) tab.classList.add("group-end");
+      }
+    });
+
+    if (select) select.value = selected.dataset.tab;
+    var label = labelFor(selected);
     if (crumb) crumb.textContent = guideTitle + " / " + label;
     document.title = label + " · " + guideTitle;
-    if (push) history.replaceState(null, "", "#" + id);
-    window.scrollTo({ top: 0, behavior: "instant" });
-    renderDiagrams(target);
-    if (window.MathJax && window.MathJax.typesetPromise) window.MathJax.typesetPromise([target]);
+    if (push) history.replaceState(null, "", "#" + selected.dataset.tab);
+
+    var diagramPromise = renderDiagrams(activeTabs);
+    var mathPromise = window.MathJax && window.MathJax.typesetPromise
+      ? window.MathJax.typesetPromise(activeTabs)
+      : Promise.resolve();
+    var shouldDeepLink = !push && requested && requested.id !== selected.dataset.tab;
+
+    if (!shouldDeepLink) window.scrollTo({ top: 0, behavior: "instant" });
+    Promise.all([diagramPromise, mathPromise]).then(function () {
+      if (!shouldDeepLink) return;
+      window.setTimeout(function () {
+        var top = requested.getBoundingClientRect().top + window.scrollY - 55;
+        window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+      }, 80);
+    });
   }
 
   document.querySelectorAll("[data-answer]").forEach(function (button) {
@@ -199,5 +256,6 @@
     if (first) draw(first.dataset.rewards);
   });
 
-  if (tabs.length) activate(location.hash.slice(1) || tabs[0].id, false);
+  window.addEventListener("hashchange", function () { activate(location.hash.slice(1), false); });
+  if (buttons.length) activate(location.hash.slice(1) || buttons[0].dataset.tab, false);
 })();

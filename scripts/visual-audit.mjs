@@ -15,10 +15,22 @@ const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms)
 const preferredShots = new Map([
   ["ML - HSTU", "attention"],
   ["ML - Semantic IDs", "rqvae"],
-  ["ML - Multimodal MMoE", "taxonomy"],
+  ["ML - Multimodal MMoE", "shazeer"],
   ["ML - OneRec", "ipa"],
   ["RL - PPO and GRPO", "grpo"]
 ]);
+
+function tabDefinitionsFromHtml(html) {
+  return [...html.matchAll(/<button\b[^>]*>/g)]
+    .map((match) => match[0])
+    .filter((tag) => /\bclass="[^"]*\btab-btn\b[^"]*"/.test(tag))
+    .map((tag) => {
+      const key = tag.match(/\bdata-tab="([^"]+)"/)?.[1];
+      const grouped = tag.match(/\bdata-panels="([^"]+)"/)?.[1];
+      return key ? { key, panels: (grouped || key).split(",").map((panel) => panel.trim()).filter(Boolean) } : null;
+    })
+    .filter(Boolean);
+}
 
 const guides = readdirSync(root, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
@@ -27,9 +39,9 @@ const guides = readdirSync(root, { withFileTypes: true })
     try {
       const html = readFileSync(page, "utf8");
       if (!html.includes("../assets/guide.js")) return null;
-      const tabs = [...html.matchAll(/class="[^"]*\btab-btn\b[^"]*"[^>]*data-tab="([^"]+)"/g)].map((match) => match[1]);
+      const tabs = tabDefinitionsFromHtml(html);
       if (!tabs.length) return null;
-      return { dir: entry.name, page, tabs, shot: preferredShots.get(entry.name) || tabs[Math.floor(tabs.length / 2)] };
+      return { dir: entry.name, page, tabs, shot: preferredShots.get(entry.name) || tabs[Math.floor(tabs.length / 2)].panels[0] };
     } catch {
       return null;
     }
@@ -38,8 +50,9 @@ const guides = readdirSync(root, { withFileTypes: true })
   .filter((guide) => !guideFilter || guide.dir.includes(guideFilter))
   .map((guide) => {
     if (!tabFilter) return guide;
-    const tabs = guide.tabs.filter((tab) => tab.includes(tabFilter));
-    return { ...guide, tabs, shot: tabs[0] };
+    const tabs = guide.tabs.filter((tab) => tab.key.includes(tabFilter) || tab.panels.some((panel) => panel.includes(tabFilter)));
+    const shotIsCovered = tabs.some((tab) => tab.key === guide.shot || tab.panels.includes(guide.shot));
+    return { ...guide, tabs, shot: shotIsCovered ? guide.shot : tabs[0]?.panels[0] };
   })
   .filter((guide) => guide.tabs.length)
   .sort((left, right) => left.dir.localeCompare(right.dir));
@@ -119,17 +132,19 @@ async function activate(cdp, tab) {
 
 async function collectMetrics(cdp) {
   return evaluate(cdp, `(() => {
-    const active = document.querySelector('.tab.active');
-    if (!active) return { fatal: 'No active panel' };
+    const active = [...document.querySelectorAll('.tab.active')];
+    if (!active.length) return { fatal: 'No active panel' };
     const visible = (element) => element.getClientRects().length > 0;
     const protectedByScroller = (element) => {
-      for (let node = element; node && node !== active.parentElement; node = node.parentElement) {
+      const panel = element.closest('.tab.active');
+      for (let node = element; node && panel && node !== panel.parentElement; node = node.parentElement) {
         const overflow = getComputedStyle(node).overflowX;
         if (overflow === 'auto' || overflow === 'scroll') return true;
       }
       return false;
     };
-    const uncontainedOverflow = [...active.querySelectorAll('*')]
+    const activeElements = active.flatMap((panel) => [...panel.querySelectorAll('*')]);
+    const uncontainedOverflow = activeElements
       .filter(visible)
       .filter((element) => element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 4)
       .filter((element) => !protectedByScroller(element))
@@ -140,12 +155,13 @@ async function collectMetrics(cdp) {
         client: element.clientWidth,
         scroll: element.scrollWidth
       }));
-    const mermaids = [...active.querySelectorAll('.mermaid')];
-    const math = [...active.querySelectorAll('.math')];
+    const mermaids = active.flatMap((panel) => [...panel.querySelectorAll('.mermaid')]);
+    const math = active.flatMap((panel) => [...panel.querySelectorAll('.math')]);
     return {
-      id: active.id,
+      id: active[0].id,
+      ids: active.map((panel) => panel.id),
       title: document.title,
-      activeCount: document.querySelectorAll('.tab.active').length,
+      activeCount: active.length,
       selectedButton: document.querySelector('.tab-btn.active')?.dataset.tab || null,
       mermaidExpected: mermaids.length,
       mermaidRendered: mermaids.filter((element) => element.dataset.processed === 'true' && element.querySelector('svg')).length,
@@ -161,25 +177,44 @@ async function collectMetrics(cdp) {
 
 async function smokeInteractions(cdp) {
   return evaluate(cdp, `(() => {
-    const active = document.querySelector('.tab.active');
-    active.querySelectorAll('input[type="range"]').forEach((input) => {
+    const active = [...document.querySelectorAll('.tab.active')];
+    const all = (selector) => active.flatMap((panel) => [...panel.querySelectorAll(selector)]);
+    all('input[type="range"]').forEach((input) => {
       input.value = input.max;
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    active.querySelectorAll('[data-choice-group]').forEach((group) => {
+    all('[data-choice-group]').forEach((group) => {
       const choices = group.querySelectorAll('[data-choice]');
       if (choices[1]) choices[1].click();
     });
-    const attention = active.querySelectorAll('[data-attention-mode]');
+    const attention = all('[data-attention-mode]');
     if (attention[1]) attention[1].click();
-    const answerButton = active.querySelector('[data-answer]');
+    const answerButton = all('[data-answer]')[0];
     if (answerButton) answerButton.click();
     return {
-      ranges: active.querySelectorAll('input[type="range"]').length,
-      activeChoices: active.querySelectorAll('[data-choice].active').length,
-      revealedAnswers: active.querySelectorAll('.answer.show').length
+      ranges: all('input[type="range"]').length,
+      activeChoices: all('[data-choice].active').length,
+      revealedAnswers: all('.answer.show').length
     };
   })()`);
+}
+
+async function revealPanel(cdp, panel, expectedTab) {
+  const found = await evaluate(cdp, `Boolean(document.getElementById(${JSON.stringify(panel)}))`);
+  if (!found) throw new Error(`Missing deep-link panel: ${panel}`);
+  await evaluate(cdp, `location.hash = ${JSON.stringify(`#${panel}`)}`);
+  await delay(750);
+  const alignment = await evaluate(cdp, `(() => {
+    const target = document.getElementById(${JSON.stringify(panel)});
+    return {
+      hash: location.hash,
+      selectedButton: document.querySelector(".tab-btn.active")?.dataset.tab || null,
+      top: Math.round(target.getBoundingClientRect().top)
+    };
+  })()`);
+  if (alignment.hash !== `#${panel}` || alignment.selectedButton !== expectedTab || alignment.top < 35 || alignment.top > 75) {
+    throw new Error(`Broken deep link ${panel}: ${JSON.stringify(alignment)}`);
+  }
 }
 
 async function screenshot(cdp, name) {
@@ -235,25 +270,29 @@ try {
   console.log("LANDING desktop", JSON.stringify(landingDesktop));
 
   for (const guide of guides) {
-    await navigate(cdp, guideUrl(guide, guide.tabs[0]));
+    await navigate(cdp, guideUrl(guide, guide.tabs[0].key));
     const eventBaseline = cdp.events.length;
 
     for (const tab of guide.tabs) {
-      await activate(cdp, tab);
+      await activate(cdp, tab.key);
       const report = await collectMetrics(cdp);
+      const panelsMatch = report.ids?.length === tab.panels.length && report.ids.every((id, index) => id === tab.panels[index]);
       const bad = report.fatal ||
-        report.activeCount !== 1 ||
-        report.id !== tab ||
-        report.selectedButton !== tab ||
+        report.activeCount !== tab.panels.length ||
+        !panelsMatch ||
+        report.selectedButton !== tab.key ||
         report.mermaidRendered !== report.mermaidExpected ||
         report.mermaidErrors ||
         (report.mathExpected && report.mathRendered !== report.mathExpected) ||
         report.rootOverflow > 2 ||
         report.uncontainedOverflow.length;
       if (bad) failed = true;
-      console.log(`${bad ? "FAIL" : "PASS"} desktop ${guide.dir}#${tab}`, JSON.stringify(report));
+      console.log(`${bad ? "FAIL" : "PASS"} desktop ${guide.dir}#${tab.key}`, JSON.stringify(report));
       await smokeInteractions(cdp);
-      if (tab === guide.shot) await screenshot(cdp, `${slugify(guide.dir)}-${tab}-desktop`);
+      if (tab.key === guide.shot || tab.panels.includes(guide.shot)) {
+        await revealPanel(cdp, guide.shot, tab.key);
+        await screenshot(cdp, `${slugify(guide.dir)}-${guide.shot}-desktop`);
+      }
     }
 
     const browserErrors = cdp.events.slice(eventBaseline).filter((event) =>
@@ -268,22 +307,26 @@ try {
 
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     for (const tab of guide.tabs) {
-      await activate(cdp, tab);
+      await activate(cdp, tab.key);
       const report = await collectMetrics(cdp);
+      const panelsMatch = report.ids?.length === tab.panels.length && report.ids.every((id, index) => id === tab.panels[index]);
       const bad = report.fatal ||
-        report.activeCount !== 1 ||
-        report.id !== tab ||
-        report.selectedButton !== tab ||
+        report.activeCount !== tab.panels.length ||
+        !panelsMatch ||
+        report.selectedButton !== tab.key ||
         report.rootOverflow > 2 ||
         report.uncontainedOverflow.length;
       if (bad) failed = true;
-      console.log(`${bad ? "FAIL" : "PASS"} mobile ${guide.dir}#${tab}`, JSON.stringify({
-        id: report.id,
+      console.log(`${bad ? "FAIL" : "PASS"} mobile ${guide.dir}#${tab.key}`, JSON.stringify({
+        ids: report.ids,
         rootOverflow: report.rootOverflow,
         uncontainedOverflow: report.uncontainedOverflow,
         viewport: report.viewport
       }));
-      if (tab === guide.shot) await screenshot(cdp, `${slugify(guide.dir)}-${tab}-mobile`);
+      if (tab.key === guide.shot || tab.panels.includes(guide.shot)) {
+        await revealPanel(cdp, guide.shot, tab.key);
+        await screenshot(cdp, `${slugify(guide.dir)}-${guide.shot}-mobile`);
+      }
     }
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 1400, deviceScaleFactor: 1, mobile: false });
   }

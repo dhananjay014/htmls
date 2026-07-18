@@ -18,25 +18,19 @@
       <div class="brand-mark"><span class="brand-icon">MM</span><span>Multimodal MMoE</span></div>
       <p>Route redundancy, uniqueness, and synergy to interaction-specialized experts.</p>
     </div>
-    <div class="nav-label">Build the idea</div>
-    <button class="tab-btn active" data-tab="overview"><span class="num">00</span>Start here</button>
-    <button class="tab-btn" data-tab="taxonomy"><span class="num">01</span>Three interactions</button>
-    <button class="tab-btn" data-tab="categorize"><span class="num">02</span>Categorization math</button>
-    <button class="tab-btn" data-tab="experts"><span class="num">03</span>Train the experts</button>
-    <button class="tab-btn" data-tab="routing"><span class="num">04</span>Route &amp; fuse</button>
-    <div class="nav-label">Reason with it</div>
-    <button class="tab-btn" data-tab="worked"><span class="num">05</span>Worked cases</button>
-    <button class="tab-btn" data-tab="evidence"><span class="num">06</span>Evidence &amp; limits</button>
+    <div class="nav-label">Guide</div>
+    <button class="tab-btn active" data-tab="build" data-panels="overview,shazeer,taxonomy,categorize,experts,routing"><span class="num">01</span>Build the idea</button>
+    <button class="tab-btn" data-tab="reason" data-panels="worked,evidence"><span class="num">02</span>Reason with it</button>
     <div class="nav-label">Study</div>
-    <button class="tab-btn" data-tab="revision"><span class="num">07</span>Revision sheet</button>
-    <button class="tab-btn" data-tab="references"><span class="num">08</span>Paper &amp; sources</button>
+    <button class="tab-btn" data-tab="revision"><span class="num">03</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">04</span>Papers &amp; sources</button>
     <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20Feature%20Interactions/">Feature Interactions</a></div>
   </aside>
 
   <main class="content">
     <header class="topbar">
       <select class="mobile-nav" aria-label="Choose section"></select>
-      <span class="crumb" id="crumb">Multimodal MMoE / Start here</span>
+      <span class="crumb" id="crumb">Multimodal MMoE / Build the idea</span>
       <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/Multimodal-MMoE.pdf">PDF</a></div>
     </header>
 
@@ -45,7 +39,7 @@
       <h1>Not every pair of modalities interacts the same way.</h1>
       <p class="lede">Sometimes image and text repeat the answer. Sometimes only one carries the clue. Sometimes the answer appears only when their meanings conflict or combine. Multimodal MMoE trains a different expert for each case.</p>
       <div class="meta-row"><span class="chip primary">redundancy</span><span class="chip">uniqueness</span><span class="chip">synergy</span><span class="chip">specialized experts</span><span class="chip">soft routing</span></div>
-      <div class="callout blue"><strong>Name disambiguation</strong><p>The linked paper’s MMoE means <em>Multimodal Mixtures of Experts</em>. It is not Google’s 2018 Multi-gate Mixture-of-Experts architecture for multi-task recommendation, despite the similar acronym.</p></div>
+      <div class="callout blue"><strong>Name disambiguation</strong><p>The linked paper’s MMoE means <em>Multimodal Mixtures of Experts</em>. It is not Google’s 2018 Multi-gate Mixture-of-Experts architecture for multi-task recommendation. It also differs from Shazeer et al.’s 2017 sparse MoE, which supplies the conditional-computation foundation explained in the next chapter.</p></div>
 
       <h2>The full method in one picture</h2>
       <figure class="diagram">
@@ -88,6 +82,94 @@ flowchart LR
 
       <div class="callout"><strong>Memory hook</strong><p>Classify how the modalities relate before asking what they jointly predict.</p></div>
       <div class="paper"><div><strong>MMoE: Enhancing Multimodal Models with Mixtures of Multimodal Interaction Experts</strong>Yu et al., arXiv:2311.09580 v3</div><div class="paper-links"><a href="papers/Multimodal-MMoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/2311.09580">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="shazeer"><div class="page">
+      <div class="eyebrow">Foundation · Shazeer et al. 2017</div>
+      <h1>Sparse MoE: many parameters, little computation per token.</h1>
+      <p class="lede">Noam Shazeer and coauthors made conditional computation practical at large scale: a learned gate sends each input to only a few feed-forward experts, so model capacity can grow much faster than per-input compute.</p>
+
+      <div class="callout"><strong>Terminology first</strong><p>The 2017 paper calls this a <em>Sparsely-Gated Mixture-of-Experts layer</em>, or sparse MoE—not MMoE. It is included here because it establishes the router–expert mechanism that later MoE systems build upon.</p></div>
+
+      <h2>The layer in one picture</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Route sparsely, compute selectively, combine smoothly</strong><span>Illustrative top-2 routing</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["input x"] --> G["learned noisy gate<br/>score every expert"]
+  G --> K["KeepTopK<br/>retain E2 and E4"]
+  K --> W2["g2 = 0.60"]
+  K --> W4["g4 = 0.40"]
+  X --> E2["expert E2(x)"]
+  X --> E4["expert E4(x)"]
+  W2 --> MIX["weighted sum"]
+  E2 --> MIX
+  W4 --> MIX
+  E4 --> MIX
+  OFF["all other experts<br/>not evaluated"] -.-> MIX
+  MIX --> Y["MoE output y"]
+  class X input; class G param; class K,W2,W4 route; class E2,E4 param; class OFF risk; class MIX op; class Y output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef risk fill:#f4deda,stroke:#a8493c,stroke-width:2px;
+  classDef op fill:#f2dfdc,stroke:#a04b3e,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Every expert has compatible input and output dimensions but separate parameters. If \(G_i(x)=0\), expert \(E_i\) need not run. The gate remains differentiable through the selected experts’ nonzero weights.</figcaption>
+      </figure>
+
+      <h2>Derive noisy top-k gating</h2>
+      <div class="derivation">
+        <h3>From dense expert scores to sparse conditional compute</h3>
+        <div class="derivation-step"><span class="step-no">1</span><div class="step-formula">\[s_i=(xW_g)_i+\epsilon_i\operatorname{Softplus}((xW_{noise})_i),\quad \epsilon_i\sim\mathcal N(0,1)\]</div><div class="step-explain"><strong>Score with learned exploration.</strong>The first term learns routing preference; trainable Gaussian noise helps experts receive varied traffic while the gate is learning.</div></div>
+        <div class="derivation-step"><span class="step-no">2</span><div class="step-formula">\[\widetilde s=\operatorname{KeepTopK}(s,k)\]</div><div class="step-explain"><strong>Delete almost every route.</strong>Keep the \(k\) largest scores and replace every other score by \(-\infty\).</div></div>
+        <div class="derivation-step"><span class="step-no">3</span><div class="step-formula">\[G(x)=\operatorname{softmax}(\widetilde s)\]</div><div class="step-explain"><strong>Normalize only the survivors.</strong>Exactly \(k\) gate weights are nonzero, and those selected weights sum to one.</div></div>
+        <div class="derivation-step"><span class="step-no">4</span><div class="step-formula">\[y=\sum_{i=1}^{n}G_i(x)E_i(x)\]</div><div class="step-explain"><strong>Run and mix only selected experts.</strong>Capacity scales with \(n\), while expert computation for one input scales mainly with \(k\ll n\).</div></div>
+      </div>
+
+      <h2>A numeric top-2 route</h2>
+      <p>Suppose four post-noise scores are \(s=[1.2,2.4,0.8,2.0]\) and \(k=2\). Keeping experts 2 and 4 gives \([{-\infty},2.4,{-\infty},2.0]\). Their two-way softmax is approximately \([0,0.599,0,0.401]\).</p>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Selected expert outputs</b>\[E_2(x)=[2,-1],\qquad E_4(x)=[0,3]\]<p>Experts 1 and 3 are skipped for this input.</p></div>
+        <div class="formula-card"><b>Weighted MoE output</b>\[y=0.599[2,-1]+0.401[0,3]\approx[1.20,0.60]\]<p>Sparsity chooses the computation; soft weights combine its result.</p></div>
+      </div>
+
+      <h2>Why expert collapse needs an auxiliary loss</h2>
+      <p>A gate can favor the same few experts early. Those experts then train faster, become more useful, and attract even more traffic—a self-reinforcing collapse. Shazeer et al. balance both total gate mass (“importance”) and the number of examples routed to each expert (“load”).</p>
+      <div class="math"><span class="label">Batch-level balancing idea</span>\[\operatorname{Importance}(X)=\sum_{x\in X}G(x)\]
+\[\mathcal L_{aux}=w_{importance}\,\operatorname{CV}(\operatorname{Importance}(X))^2+w_{load}\,\operatorname{CV}(\operatorname{Load}(X))^2\]</div>
+      <p class="plain-note">The coefficient of variation is standard deviation divided by mean. Squaring it penalizes unequal utilization without requiring every individual input to route uniformly.</p>
+
+      <h2>Do not conflate three architectures</h2>
+      <div class="table-wrap"><table><thead><tr><th>Architecture</th><th>What experts specialize in</th><th>Routing</th><th>Main purpose</th></tr></thead><tbody>
+        <tr><td>Shazeer sparse MoE (2017)</td><td>Patterns discovered jointly during training</td><td>One noisy top-\(k\) gate per input; only selected experts run</td><td>Add parameter capacity without proportional compute</td></tr>
+        <tr><td>Multi-gate MMoE (2018)</td><td>Shared factors useful across prediction tasks</td><td>A separate soft gate for each task</td><td>Reduce negative transfer in multi-task learning</td></tr>
+        <tr><td>Multimodal MMoE (2023/2024)</td><td>Redundant, unique, or synergistic modality interactions</td><td>Experts train on labeled subsets; a learned router softly fuses task logits</td><td>Handle different cross-modal information structures</td></tr>
+      </tbody></table></div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>The shared idea and the crucial fork</strong><span>Same vocabulary, different optimization target</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart TB
+  ROOT["Mixture of experts<br/>specialize + route + combine"] --> S["Shazeer sparse MoE"]
+  ROOT --> MT["Multi-gate MMoE"]
+  ROOT --> MM["Multimodal MMoE"]
+  S --> SC["top-k conditional compute<br/>scale capacity"]
+  MT --> TC["one gate per task<br/>share experts"]
+  MM --> IC["one expert per interaction type<br/>route R / U / S"]
+  class ROOT op; class S,MT,MM param; class SC route; class TC output; class IC input;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f2dfdc,stroke:#a04b3e,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>The reusable pattern is expert specialization plus input-dependent mixing. What changes is the source of specialization and whether routing saves computation.</figcaption>
+      </figure>
+
+      <div class="quiz"><h3>Concept check</h3><p>A sparse MoE has 1,000 experts and uses \(k=2\). Does one token execute all 1,000 expert networks?</p><button data-answer="shazeer-q">Reveal answer</button><div class="answer" id="shazeer-q">No. The gate scores the routes, but only the two selected expert networks need to evaluate that token. This is the conditional-computation advantage; routing and communication still have costs.</div></div>
+      <div class="paper"><div><strong>Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer</strong>Noam Shazeer et al. · arXiv:1701.06538, 2017</div><div class="paper-links"><a href="papers/Shazeer-Sparse-MoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/1701.06538">arXiv</a></div></div>
     </div></section>
 
     <section class="tab" id="taxonomy"><div class="page">
@@ -367,10 +449,11 @@ flowchart LR
 
     <section class="tab" id="revision"><div class="page">
       <div class="eyebrow">Rapid recall</div>
-      <h1>MMoE in nine lines.</h1>
+      <h1>MMoE and its sparse-MoE foundation in ten lines.</h1>
       <p class="lede">The complete answer starts with the taxonomy, derives the training labels, and ends with the train-test routing mismatch.</p>
 
       <div class="table-wrap"><table><thead><tr><th>Concept</th><th>Memory hook</th><th>Precise statement</th></tr></thead><tbody>
+        <tr><td>Shazeer sparse MoE</td><td>Many experts, choose \(k\)</td><td>\(G(x)=\operatorname{softmax}(\operatorname{KeepTopK}(H(x),k))\), then \(y=\sum_iG_i(x)E_i(x)\).</td></tr>
         <tr><td>Redundancy</td><td>Both alone are right</td><td>\(y_1=y_2=y_m\), so \(\Delta=0\).</td></tr>
         <tr><td>Uniqueness</td><td>One alone is right</td><td>Exactly one unimodal prediction matches \(y_m\), so \(\Delta=1\).</td></tr>
         <tr><td>Synergy</td><td>Neither alone is right</td><td>Both disagree with \(y_m\), so \(\Delta=2\).</td></tr>
@@ -384,7 +467,7 @@ flowchart LR
 
       <h2>Interview drill</h2>
       <div class="grid2">
-        <div class="note"><h3>Is this sparse MoE?</h3><p>Not in the main method. It trains three full task experts and softly fuses their outputs; all may run at inference.</p></div>
+        <div class="note"><h3>Is multimodal MMoE the Shazeer sparse MoE?</h3><p>No. Shazeer’s gate activates top-\(k\) jointly trained feed-forward experts to save compute. Multimodal MMoE trains three full task models on R/U/S subsets and may run all three at inference.</p></div>
         <div class="note"><h3>Why use the true label in categorization?</h3><p>The category asks which modalities independently contain enough information for the correct task answer, so correctness must be measured against \(y_m\).</p></div>
         <div class="note"><h3>Why cannot \(\Delta\) be computed online?</h3><p>It requires \(y_m\), the answer being predicted. A separate router estimates the interaction from inputs only.</p></div>
         <div class="note"><h3>Why soft fusion?</h3><p>Interactions need not be pure, router uncertainty is real, and multiple experts may contain useful evidence.</p></div>
@@ -400,14 +483,18 @@ flowchart LR
       <h1>Primary source and study path.</h1>
       <p class="lede">Read the interaction definition and train-test mismatch before the benchmark table; otherwise MMoE can look like a generic ensemble.</p>
 
-      <div class="paper"><div><strong>MMoE: Enhancing Multimodal Models with Mixtures of Multimodal Interaction Experts</strong>Haofei Yu, Zhengyang Qi, Lawrence Jang, Ruslan Salakhutdinov, Louis-Philippe Morency, Paul Pu Liang · arXiv v3, September 2024</div><div class="paper-links"><a href="papers/Multimodal-MMoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/2311.09580">arXiv</a></div></div>
+      <div class="paper-stack">
+        <div class="paper"><div><strong>MMoE: Enhancing Multimodal Models with Mixtures of Multimodal Interaction Experts</strong>Haofei Yu, Zhengyang Qi, Lawrence Jang, Ruslan Salakhutdinov, Louis-Philippe Morency, Paul Pu Liang · arXiv v3, September 2024</div><div class="paper-links"><a href="papers/Multimodal-MMoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/2311.09580">arXiv</a></div></div>
+        <div class="paper"><div><strong>Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer</strong>Noam Shazeer, Azalia Mirhoseini, Krzysztof Maziarz, Andy Davis, Quoc Le, Geoffrey Hinton, Jeff Dean · arXiv, January 2017</div><div class="paper-links"><a href="papers/Shazeer-Sparse-MoE.pdf">Local PDF</a><a href="https://arxiv.org/abs/1701.06538">arXiv</a></div></div>
+      </div>
 
       <h2>Suggested paper path</h2>
       <div class="timeline">
-        <div class="event"><b>1 · §3.1</b><strong>Categorization</strong><p>Derive \(\delta\) and \(\Delta\), then inspect exactly how R/U/S labels are approximated.</p></div>
-        <div class="event"><b>2 · §3.2–3.3</b><strong>Experts and inference</strong><p>Separate subset-based specialization from the learned fusion model used when \(y_m\) is unavailable.</p></div>
-        <div class="event"><b>3 · §4–5</b><strong>Results and analysis</strong><p>Compare gains across backbone families and inspect per-interaction performance and scaling.</p></div>
-        <div class="event"><b>4 · §6</b><strong>Ablations</strong><p>Focus on confidence filtering, label balance, fusion strategies, and the oracle gap.</p></div>
+        <div class="event"><b>1 · Shazeer §2–4</b><strong>Sparse routing foundation</strong><p>Derive the noisy top-\(k\) gate, then study the shrinking-batch problem and the importance/load losses.</p></div>
+        <div class="event"><b>2 · Multimodal MMoE §3.1</b><strong>Categorization</strong><p>Derive \(\delta\) and \(\Delta\), then inspect exactly how R/U/S labels are approximated.</p></div>
+        <div class="event"><b>3 · §3.2–3.3</b><strong>Experts and inference</strong><p>Separate subset-based specialization from the learned fusion model used when \(y_m\) is unavailable.</p></div>
+        <div class="event"><b>4 · §4–5</b><strong>Results and analysis</strong><p>Compare gains across backbone families and inspect per-interaction performance and scaling.</p></div>
+        <div class="event"><b>5 · §6</b><strong>Ablations</strong><p>Focus on confidence filtering, label balance, fusion strategies, and the oracle gap.</p></div>
       </div>
 
       <h2>Implementation</h2>
@@ -415,7 +502,7 @@ flowchart LR
         <div class="note"><h3>Authors’ code</h3><p>The repository linked in the paper contains reproduction guidance and the multimodal expert pipeline.</p><a href="https://github.com/lwaekfjlk/mmoe">Open repository</a></div>
         <div class="note"><h3>Feature-interaction companion</h3><p>Contrast MMoE’s sample-level interaction taxonomy with architectural interaction operators such as AutoInt, DHEN, and Wukong.</p><a href="../ML%20-%20Feature%20Interactions/#dhen">Open DHEN comparison</a></div>
       </div>
-      <div class="callout"><strong>Accuracy note</strong><p>Method equations and reported results were checked against the downloaded v3 paper. Worked routing probabilities and logits are original explanatory examples.</p></div>
+      <div class="callout"><strong>Accuracy note</strong><p>Method equations and reported results were checked against both downloaded papers. The Shazeer top-2 numbers and the multimodal worked routing probabilities/logits are original explanatory examples.</p></div>
     </div></section>
   </main>
 </div>
