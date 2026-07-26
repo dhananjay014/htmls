@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and numerical guide to self-attention and multi-head attention, including every matrix shape and worked calculation.">
+  <title>Self-Attention &amp; Multi-Head Attention · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <link rel="stylesheet" href="../assets/guide.css">
+  <style>
+    .attention-map {
+      display: grid;
+      min-width: 560px;
+      grid-template-columns: 120px repeat(3, minmax(110px, 1fr));
+      border-top: 1px solid var(--line);
+      border-left: 1px solid var(--line);
+      background: white;
+    }
+    .attention-map > div {
+      padding: 12px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: center;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .attention-map .head {
+      background: #e9ede8;
+      color: #2e4036;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    .attention-map .row-label {
+      background: #f7f9f7;
+      text-align: left;
+      font-weight: 800;
+    }
+    .attention-map .heat {
+      background: color-mix(in srgb, var(--accent) var(--heat, 20%), white);
+      color: #17211c;
+      font-weight: 800;
+    }
+    .calc-list { display: grid; gap: 9px; margin: 20px 0; }
+    .calc-line {
+      overflow-x: auto;
+      padding: 13px 16px;
+      border-left: 3px solid var(--accent);
+      background: white;
+      color: #33433a;
+      font-size: 13px;
+    }
+    .calc-line strong { display: inline-block; min-width: 84px; color: var(--ink); }
+    .shape-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(130px, 1fr));
+      gap: 1px;
+      margin: 24px 0;
+      overflow-x: auto;
+      border: 1px solid #cdd7d1;
+      background: #cdd7d1;
+    }
+    .shape-step { min-width: 130px; padding: 15px; background: white; }
+    .shape-step b { display: block; color: var(--accent); font-size: 12px; }
+    .shape-step code { display: block; margin: 5px 0; font-size: 12px; }
+    .shape-step small { color: var(--muted); }
+    .number-note {
+      margin: 12px 0;
+      padding: 13px 15px;
+      border: 1px solid var(--line);
+      background: #fbfcfa;
+      color: #405148;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .matrix-label { margin: 24px 0 7px; color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .compact-table table { min-width: 900px; font-variant-numeric: tabular-nums; }
+    .math pre { margin: 14px 0 0; white-space: pre; }
+    .math pre code { color: #f7faf8; font-size: 12px; line-height: 1.65; }
+    .check-row { display: flex; align-items: flex-start; gap: 10px; }
+    .check-row::before {
+      display: grid;
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      place-items: center;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+      content: "✓";
+      font-size: 12px;
+      font-weight: 900;
+    }
+    @media (max-width: 820px) {
+      .shape-strip { grid-template-columns: repeat(5, 145px); }
+      .calc-line strong { display: block; min-width: 0; margin-bottom: 4px; }
+    }
+  </style>
+</head>
+<body data-guide-title="Self-Attention &amp; Multi-Head Attention" style="--accent:#3b5f8a;--accent-dark:#284360;--accent-soft:#dfe8f1">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">SA</span><span>Self-Attention &amp; MHA</span></div>
+      <p>Every projection, dot product, softmax, mask, head, and tensor shape worked out with real numbers.</p>
+    </div>
+    <div class="nav-label">Guide</div>
+    <button class="tab-btn active" data-tab="build" data-panels="overview,inputs,mechanism,masking,multihead"><span class="num">01</span>Build the idea</button>
+    <button class="tab-btn" data-tab="reason" data-panels="self-worked,mha-worked,shapes,pitfalls"><span class="num">02</span>Reason with it</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">03</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">04</span>Paper &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20HSTU/#attention">HSTU attention</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">Self-Attention &amp; Multi-Head Attention / Build the idea</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/Attention-Is-All-You-Need.pdf">PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Transformer foundations · fully numerical</div>
+      <h1>Attention is a learned weighted lookup.</h1>
+      <p class="lede">For every token, self-attention asks: “Which tokens matter to me right now, and what information should I collect from them?” The answer is built from matrix multiplication, scaling, masking, row-wise softmax, and a weighted sum—nothing is skipped in this guide.</p>
+      <div class="meta-row"><span class="chip primary">real-number example</span><span class="chip">embedding sizes</span><span class="chip">Q, K, V</span><span class="chip">causal masks</span><span class="chip">two complete heads</span></div>
+
+      <h2>The whole operation in one picture</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Project → compare → normalize → collect</strong><span>One layer, all tokens in parallel</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["token states X<br/>n × d_model"] --> Q["queries Q = XWQ<br/>n × d_k"]
+  X --> K["keys K = XWK<br/>n × d_k"]
+  X --> V["values V = XWV<br/>n × d_v"]
+  Q --> DOT["all query-key dots<br/>QKᵀ : n × n"]
+  K --> DOT
+  DOT --> SCALE["scale by √d_k<br/>then add mask"]
+  SCALE --> SOFT["row-wise softmax<br/>A : n × n"]
+  SOFT --> MIX["weighted values<br/>H = AV"]
+  V --> MIX
+  MIX --> H["contextual states<br/>n × d_v"]
+  class X input; class Q,K,V param; class DOT,SCALE,MIX op; class SOFT route; class H output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dfe8f1,stroke:#3b5f8a,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Each row of the attention matrix belongs to one query token. Its entries say how much that query will mix from every value row.</figcaption>
+      </figure>
+
+      <div class="math"><span class="label">Scaled dot-product attention</span>
+        \[\operatorname{Attention}(Q,K,V)
+        =\operatorname{softmax}_{\text{keys}}\!\left(\frac{QK^\top}{\sqrt{d_k}}+M\right)V\]
+      </div>
+      <p class="plain-note">Equivalent mask conventions are common. This guide uses \(QK^\top/\sqrt{d_k}+M\), where allowed entries of \(M\) are \(0\) and forbidden entries are \(-\infty\). Putting \(M\) inside the numerator is fine only if it has been scaled consistently.</p>
+
+      <div class="grid3">
+        <div class="concept"><h3>Query · what I seek</h3><p>Token \(i\) projects to \(q_i\). That vector determines what kinds of keys token \(i\) will score highly.</p></div>
+        <div class="concept"><h3>Key · what I match on</h3><p>Token \(j\) projects to \(k_j\). The dot product \(q_i\cdot k_j\) is their learned compatibility score.</p></div>
+        <div class="concept"><h3>Value · what I send</h3><p>Token \(j\) also projects to \(v_j\). Once weights are known, values—not keys—are averaged into the output.</p></div>
+      </div>
+
+      <h2>Self-attention versus ordinary lookup</h2>
+      <div class="grid2">
+        <div class="note"><h3>A database lookup uses a fixed key.</h3><p>You supply one query, retrieve matching records, and return their stored values.</p></div>
+        <div class="note"><h3>Self-attention learns all three roles.</h3><p>Every input row creates its own query, key, and value. Every query compares with every key in one batched matrix product.</p></div>
+        <div class="note"><h3>“Self” describes the source.</h3><p>Queries, keys, and values all come from the same sequence \(X\). Cross-attention instead takes queries from one sequence and keys/values from another.</p></div>
+        <div class="note"><h3>The output is contextual.</h3><p>The embedding for “bank” can become river-like or finance-like because its output mixes different neighbors in different contexts.</p></div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>Queries choose. Keys compete. Values contribute. Softmax makes each query’s choices sum to one.</p></div>
+      <div class="paper"><div><strong>Attention Is All You Need</strong>Vaswani et al. · NeurIPS 2017 · arXiv:1706.03762</div><div class="paper-links"><a href="papers/Attention-Is-All-You-Need.pdf">Local PDF</a><a href="https://arxiv.org/abs/1706.03762">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="inputs"><div class="page">
+      <div class="eyebrow">Step 1 · Construct the input matrix</div>
+      <h1>Three tokens, four numbers per token.</h1>
+      <p class="lede">Our running example uses the sequence “I love ML,” one batch item, and deliberately small vectors. Real models use the same operations with hundreds or thousands of dimensions.</p>
+
+      <div class="symbols">
+        <div class="symbol"><code>\(B=1\)</code>batch size</div>
+        <div class="symbol"><code>\(n=3\)</code>sequence length</div>
+        <div class="symbol"><code>\(d_{\text{model}}=4\)</code>embedding / residual width</div>
+        <div class="symbol"><code>\(h=2\)</code>attention heads later</div>
+        <div class="symbol"><code>\(d_k=2\)</code>query/key width per head</div>
+        <div class="symbol"><code>\(d_v=2\)</code>value width per head</div>
+      </div>
+
+      <h2>Token embedding plus position</h2>
+      <p>The embedding table itself has shape \([|\mathcal V|,d_{\text{model}}]\), where \(|\mathcal V|\) is vocabulary size. Looking up three tokens selects three rows, producing \(E\in\mathbb R^{3\times4}\). Positional vectors \(P\) have the same width so they can be added elementwise.</p>
+      <div class="math"><span class="label">Teaching values chosen for transparent arithmetic</span>
+        \[
+        E=
+        \begin{bmatrix}
+        0.8&0.1&0.9&0.0\\
+        0.1&0.8&0.1&0.9\\
+        0.9&0.8&0.1&0.1
+        \end{bmatrix},
+        \qquad
+        P=
+        \begin{bmatrix}
+        0.2&-0.1&0.1&0.0\\
+        -0.1&0.2&-0.1&0.1\\
+        0.1&0.2&-0.1&-0.1
+        \end{bmatrix}
+        \]
+      </div>
+      <div class="calc-list">
+        <div class="calc-line"><strong>I</strong>\([0.8,0.1,0.9,0.0]+[0.2,-0.1,0.1,0.0]=[1,0,1,0]\)</div>
+        <div class="calc-line"><strong>love</strong>\([0.1,0.8,0.1,0.9]+[-0.1,0.2,-0.1,0.1]=[0,1,0,1]\)</div>
+        <div class="calc-line"><strong>ML</strong>\([0.9,0.8,0.1,0.1]+[0.1,0.2,-0.1,-0.1]=[1,1,0,0]\)</div>
+      </div>
+      <div class="math"><span class="label">Input to the attention layer</span>
+        \[
+        X=E+P=
+        \begin{bmatrix}
+        1&0&1&0\\
+        0&1&0&1\\
+        1&1&0&0
+        \end{bmatrix}
+        \in\mathbb R^{3\times4}
+        \]
+      </div>
+
+      <div class="table-wrap"><table><thead><tr><th>Axis</th><th>Meaning</th><th>Our example</th><th>Typical notation</th></tr></thead><tbody>
+        <tr><td>Rows</td><td>Token positions</td><td>3 rows: I, love, ML</td><td>\(n\)</td></tr>
+        <tr><td>Columns</td><td>Features in each token state</td><td>4 features</td><td>\(d_{\text{model}}\)</td></tr>
+        <tr><td>Batch</td><td>Independent sequences processed together</td><td>Suppressed because \(B=1\)</td><td>Full tensor: \([B,n,d_{\text{model}}]\)</td></tr>
+      </tbody></table></div>
+
+      <h2>Position is not optional</h2>
+      <p>Without any position signal, self-attention is permutation-equivariant: reordering input rows simply reorders output rows. The original Transformer adds sinusoidal positional encodings; many later models use learned absolute positions or relative/rotary schemes. All provide order information that the content embeddings alone do not contain.</p>
+      <div class="callout blue"><strong>Do not confuse width with length.</strong><p>\(n=3\) counts tokens. \(d_{\text{model}}=4\) counts features per token. Attention scores form an \(n\times n\) matrix, not a \(d_{\text{model}}\times d_{\text{model}}\) matrix.</p></div>
+    </div></section>
+
+    <section class="tab" id="mechanism"><div class="page">
+      <div class="eyebrow">Step 2 · Follow the five operations</div>
+      <h1>Shapes tell you whether the math is possible.</h1>
+      <p class="lede">Keep the token axis on the left and the feature axis on the right. Every equation becomes easier once you can say what each row and column means.</p>
+
+      <div class="shape-strip" aria-label="Attention shape flow">
+        <div class="shape-step"><b>Input</b><code>\(X:[n,d_{\text{model}}]\)</code><small>one state per token</small></div>
+        <div class="shape-step"><b>Project</b><code>\(Q,K:[n,d_k]\)</code><small>\(V:[n,d_v]\)</small></div>
+        <div class="shape-step"><b>Compare</b><code>\(QK^\top:[n,n]\)</code><small>query rows × key columns</small></div>
+        <div class="shape-step"><b>Normalize</b><code>\(A:[n,n]\)</code><small>each row sums to 1</small></div>
+        <div class="shape-step"><b>Collect</b><code>\(AV:[n,d_v]\)</code><small>one context per query</small></div>
+      </div>
+
+      <div class="derivation">
+        <h3>Scaled dot-product attention, dimension by dimension</h3>
+        <div class="derivation-step"><span class="step-no">1</span><div class="step-formula">\[Q=XW^Q,\quad K=XW^K,\quad V=XW^V\]</div><div class="step-explain"><strong>Learn three views of every token.</strong>\([n,d_{\text{model}}][d_{\text{model}},d_k]\to[n,d_k]\) for queries and keys; values may use width \(d_v\).</div></div>
+        <div class="derivation-step"><span class="step-no">2</span><div class="step-formula">\[R=QK^\top,\qquad R_{ij}=q_i\cdot k_j\]</div><div class="step-explain"><strong>Compare every query with every key.</strong>\([n,d_k][d_k,n]\to[n,n]\). Row \(i\) belongs to query \(i\); column \(j\) belongs to key \(j\).</div></div>
+        <div class="derivation-step"><span class="step-no">3</span><div class="step-formula">\[S=\frac{R}{\sqrt{d_k}}+M\]</div><div class="step-explain"><strong>Control magnitude and legality.</strong>Scaling stabilizes softmax; \(M\) sets forbidden key positions to \(-\infty\).</div></div>
+        <div class="derivation-step"><span class="step-no">4</span><div class="step-formula">\[A_{ij}=\frac{\exp(S_{ij})}{\sum_{\ell=1}^{n}\exp(S_{i\ell})}\]</div><div class="step-explain"><strong>Normalize across keys.</strong>Softmax runs along the last axis. Every query row becomes a distribution over source positions.</div></div>
+        <div class="derivation-step"><span class="step-no">5</span><div class="step-formula">\[H=AV,\qquad h_i=\sum_{j=1}^{n}A_{ij}v_j\]</div><div class="step-explain"><strong>Mix value content.</strong>\([n,n][n,d_v]\to[n,d_v]\). Each query keeps its row position but receives a contextual value mixture.</div></div>
+      </div>
+
+      <h2>Why divide by \(\sqrt{d_k}\)?</h2>
+      <p>If components of \(q\) and \(k\) are independent with mean \(0\) and variance \(1\), then \(q\cdot k=\sum_{\ell=1}^{d_k}q_\ell k_\ell\) has variance \(d_k\). Its typical magnitude therefore grows like \(\sqrt{d_k}\). Large logits make softmax nearly one-hot and its gradients tiny; dividing by \(\sqrt{d_k}\) keeps the scale more stable.</p>
+
+      <div class="interactive" data-choice-group>
+        <div class="interactive-head"><strong>Same raw score row: \([5,2,3]\)</strong><span>Compare softmax before and after scaling by \(\sqrt{2}\)</span></div>
+        <div class="interactive-controls">
+          <button class="choice-btn" data-choice="unscaled">Without scaling</button>
+          <button class="choice-btn active" data-choice="scaled">With \(\sqrt{d_k}\)</button>
+        </div>
+        <div class="interactive-body">
+          <div class="choice-panel" data-choice-panel="unscaled">
+            <div class="math"><span class="label">Sharper than necessary</span>
+              \[\operatorname{softmax}([5,2,3])
+              =\frac{[1,e^{-3},e^{-2}]}{1+e^{-3}+e^{-2}}
+              =[0.8438,0.0420,0.1142]\]
+            </div>
+          </div>
+          <div class="choice-panel active" data-choice-panel="scaled">
+            <div class="math"><span class="label">The calculation used in our example</span>
+              \[\operatorname{softmax}\!\left(\frac{[5,2,3]}{\sqrt2}\right)
+              =\frac{[1,e^{-2.1213},e^{-1.4142}]}{1+e^{-2.1213}+e^{-1.4142}}
+              =[0.7337,0.0879,0.1784]\]
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2>What softmax is—and is not—doing</h2>
+      <div class="grid3">
+        <div class="card"><h3>It is row-local.</h3><p>Changing query \(i\) changes row \(i\). Other rows have their own denominators.</p></div>
+        <div class="card"><h3>It creates competition.</h3><p>Increasing one key’s weight lowers the remaining weights because a row must sum to one.</p></div>
+        <div class="card"><h3>It does not mix values yet.</h3><p>The matrix \(A\) contains routing weights. Content moves only when \(A\) multiplies \(V\).</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="masking"><div class="page">
+      <div class="eyebrow">Step 3 · Control who may look where</div>
+      <h1>A mask changes the softmax support.</h1>
+      <p class="lede">A causal decoder must not use future tokens. Add \(-\infty\) to forbidden logits before softmax; their exponentials become zero, so they receive exactly zero probability.</p>
+
+      <h2>Causal mask for three positions</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Mask</b>
+          \[
+          M_{\text{causal}}=
+          \begin{bmatrix}
+          0&-\infty&-\infty\\
+          0&0&-\infty\\
+          0&0&0
+          \end{bmatrix}
+          \]
+          <p>Row 1 sees only position 1; row 2 sees positions 1–2; row 3 sees all three.</p>
+        </div>
+        <div class="formula-card"><b>Allowed region</b>
+          \[
+          j\le i\Rightarrow M_{ij}=0,\qquad
+          j>i\Rightarrow M_{ij}=-\infty
+          \]
+          <p>The diagonal remains visible, so a token may attend to itself.</p>
+        </div>
+      </div>
+
+      <p>Using the first head from our worked example, the unmasked scaled logits are:</p>
+      <div class="math"><span class="label">Before and after causal masking</span>
+        \[
+        S=
+        \begin{bmatrix}
+        3.5355&1.4142&2.1213\\
+        1.4142&0.7071&0.7071\\
+        2.1213&0.7071&1.4142
+        \end{bmatrix}
+        \]
+        \[
+        S+M_{\text{causal}}=
+        \begin{bmatrix}
+        3.5355&-\infty&-\infty\\
+        1.4142&0.7071&-\infty\\
+        2.1213&0.7071&1.4142
+        \end{bmatrix}
+        \]
+      </div>
+
+      <div class="calc-list">
+        <div class="calc-line"><strong>Row 1</strong>\(\operatorname{softmax}([3.5355,-\infty,-\infty])=[1,0,0]\)</div>
+        <div class="calc-line"><strong>Row 2</strong>\(\frac{[1,e^{-0.7071},0]}{1+e^{-0.7071}}=[0.6698,0.3302,0]\)</div>
+        <div class="calc-line"><strong>Row 3</strong>No future key exists, so it stays \([0.5760,0.1400,0.2840]\).</div>
+      </div>
+      <div class="math"><span class="label">Causal attention weights and outputs</span>
+        \[
+        A_{\text{causal}}=
+        \begin{bmatrix}
+        1&0&0\\
+        0.6698&0.3302&0\\
+        0.5760&0.1400&0.2840
+        \end{bmatrix}
+        \]
+        \[
+        A_{\text{causal}}V=
+        \begin{bmatrix}
+        2.0000&-1.0000\\
+        1.5046&-0.1744\\
+        1.5060&-0.0819
+        \end{bmatrix}
+        \]
+      </div>
+      <div class="number-note">Row 2 check: \(0.6698[2,-1]+0.3302[0.5,1.5]=[1.5046,-0.1744]\).</div>
+
+      <h2>Padding masks solve a different problem</h2>
+      <div class="grid2">
+        <div class="note"><h3>Causal mask</h3><p>Blocks information from future key positions. It depends on relative query/key position.</p></div>
+        <div class="note"><h3>Padding mask</h3><p>Blocks artificial pad tokens in the key columns. It depends on which sequence positions are real.</p></div>
+      </div>
+      <p>If token 3 were padding, its key column would receive \(-\infty\) in every row. Implementations commonly combine padding and causal masks by addition or a boolean OR before softmax.</p>
+      <div class="callout red"><strong>Mask before softmax.</strong><p>Zeroing attention weights after softmax breaks normalization unless you renormalize. Adding a large negative number or \(-\infty\) to logits is the standard operation.</p></div>
+    </div></section>
+
+    <section class="tab" id="multihead"><div class="page">
+      <div class="eyebrow">Step 4 · Run several attention spaces</div>
+      <h1>Each head gets its own way to compare tokens.</h1>
+      <p class="lede">Multi-head attention does not copy one attention map. It learns separate query, key, and value projections, performs a separate softmax in every head, concatenates the head outputs, and mixes them with one output projection.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Two heads in parallel</strong><span>Our numerical setup: \(d_{\text{model}}=4,\ h=2,\ d_k=d_v=2\)</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["X<br/>3 × 4"] --> P1["Head 1 projections<br/>WQ₁, WK₁, WV₁"]
+  X --> P2["Head 2 projections<br/>WQ₂, WK₂, WV₂"]
+  P1 --> A1["softmax(Q₁K₁ᵀ / √2)<br/>3 × 3"]
+  P2 --> A2["softmax(Q₂K₂ᵀ / √2)<br/>3 × 3"]
+  A1 --> H1["H₁ = A₁V₁<br/>3 × 2"]
+  A2 --> H2["H₂ = A₂V₂<br/>3 × 2"]
+  H1 --> C["Concat(H₁,H₂)<br/>3 × 4"]
+  H2 --> C
+  C --> WO["output projection WO<br/>4 × 4"]
+  WO --> Y["MHA output<br/>3 × 4"]
+  class X input; class P1,P2,WO param; class A1,A2 route; class H1,H2,C op; class Y output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#dfe8f1,stroke:#3b5f8a,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Heads have separate parameters and separate row-wise softmax distributions. Concatenation restores the combined feature width; \(W^O\) lets information cross between head subspaces.</figcaption>
+      </figure>
+
+      <div class="math"><span class="label">Multi-head attention</span>
+        \[
+        \operatorname{head}_r=
+        \operatorname{Attention}(XW_r^Q,XW_r^K,XW_r^V)
+        \]
+        \[
+        \operatorname{MHA}(X)=
+        \operatorname{Concat}(\operatorname{head}_1,\ldots,\operatorname{head}_h)W^O
+        \]
+      </div>
+
+      <div class="table-wrap"><table><thead><tr><th>Parameter</th><th>General shape</th><th>Our two-head example</th><th>Original Transformer base</th></tr></thead><tbody>
+        <tr><td>\(W_r^Q,W_r^K\)</td><td>\([d_{\text{model}},d_k]\) per head</td><td>\([4,2]\)</td><td>\([512,64]\), \(h=8\)</td></tr>
+        <tr><td>\(W_r^V\)</td><td>\([d_{\text{model}},d_v]\) per head</td><td>\([4,2]\)</td><td>\([512,64]\)</td></tr>
+        <tr><td>Concatenated heads</td><td>\([n,h\,d_v]\)</td><td>\([3,4]\)</td><td>\([n,512]\)</td></tr>
+        <tr><td>\(W^O\)</td><td>\([h\,d_v,d_{\text{model}}]\)</td><td>\([4,4]\)</td><td>\([512,512]\)</td></tr>
+      </tbody></table></div>
+
+      <h2>Why not use one wide head?</h2>
+      <div class="grid3">
+        <div class="concept"><h3>Separate routing patterns</h3><p>One head may emphasize nearby syntax while another emphasizes a distant entity or delimiter.</p></div>
+        <div class="concept"><h3>Separate representation subspaces</h3><p>Each head learns different \(W^Q,W^K,W^V\), so “match” and “content” mean different things per head.</p></div>
+        <div class="concept"><h3>Similar total width</h3><p>When \(d_k=d_v=d_{\text{model}}/h\), splitting into heads keeps concatenated width at \(d_{\text{model}}\).</p></div>
+      </div>
+
+      <h2>Parameter count in our tiny layer</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Per head</b>\[3(4\times2)=24\ \text{weights}\]<p>Eight each for query, key, and value projections.</p></div>
+        <div class="formula-card"><b>Two heads + output</b>\[2(24)+(4\times4)=64\ \text{weights}\]<p>Biases omitted. This equals four dense \(4\times4\) maps when Q/K/V are packed.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="self-worked"><div class="page">
+      <div class="eyebrow">Worked example A · one complete head</div>
+      <h1>Calculate self-attention without hiding a step.</h1>
+      <p class="lede">We now carry the \(3\times4\) input matrix through projections, nine dot products, scaling, three separate softmax calculations, and three weighted value sums.</p>
+
+      <div class="callout"><strong>Rounding policy</strong><p>Projection and dot-product values are exact. Exponentials, attention weights, and outputs are shown to four decimals. The calculations use unrounded values internally, so a last decimal may differ from hand arithmetic on displayed numbers.</p></div>
+
+      <h2>0 · Start from \(X\)</h2>
+      <div class="math"><span class="label">Rows are I, love, ML</span>
+        \[
+        X=
+        \begin{bmatrix}
+        1&0&1&0\\
+        0&1&0&1\\
+        1&1&0&0
+        \end{bmatrix},
+        \qquad X:[3,4]
+        \]
+      </div>
+
+      <h2>1 · Project \(X\) into queries, keys, and values</h2>
+      <p>For this teaching head, \(W_1^Q=W_1^K\) only to keep the arithmetic compact. In a real layer they are independently learned matrices.</p>
+      <div class="math"><span class="label">Head 1 parameter matrices</span>
+        \[
+        W_1^Q=W_1^K=
+        \begin{bmatrix}
+        1&0\\
+        0&1\\
+        1&1\\
+        1&-1
+        \end{bmatrix},
+        \qquad
+        W_1^V=
+        \begin{bmatrix}
+        1&0\\
+        0&1\\
+        1&-1\\
+        0.5&0.5
+        \end{bmatrix}
+        \]
+      </div>
+      <p class="number-note">Shape check: \([3,4][4,2]\to[3,2]\). Each output row has two features.</p>
+
+      <div class="matrix-label">Every query/key row multiplication</div>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Token 1</strong>\(q_1=k_1=[1,0,1,0]W_1^Q=[1+1,\ 1]=[2,1]\)</div>
+        <div class="calc-line"><strong>Token 2</strong>\(q_2=k_2=[0,1,0,1]W_1^Q=[1,\ 1-1]=[1,0]\)</div>
+        <div class="calc-line"><strong>Token 3</strong>\(q_3=k_3=[1,1,0,0]W_1^Q=[1,\ 1]=[1,1]\)</div>
+      </div>
+      <div class="matrix-label">Every value row multiplication</div>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Token 1</strong>\(v_1=[1,0,1,0]W_1^V=[1+1,\ -1]=[2,-1]\)</div>
+        <div class="calc-line"><strong>Token 2</strong>\(v_2=[0,1,0,1]W_1^V=[0.5,\ 1+0.5]=[0.5,1.5]\)</div>
+        <div class="calc-line"><strong>Token 3</strong>\(v_3=[1,1,0,0]W_1^V=[1,\ 1]=[1,1]\)</div>
+      </div>
+      <div class="math"><span class="label">Projection results</span>
+        \[
+        Q_1=K_1=
+        \begin{bmatrix}
+        2&1\\
+        1&0\\
+        1&1
+        \end{bmatrix},
+        \qquad
+        V_1=
+        \begin{bmatrix}
+        2&-1\\
+        0.5&1.5\\
+        1&1
+        \end{bmatrix}
+        \]
+      </div>
+
+      <h2>2 · Compute all nine query-key dot products</h2>
+      <div class="math"><span class="label">Raw compatibility matrix</span>
+        \[
+        Q_1K_1^\top=
+        \begin{bmatrix}
+        2(2)+1(1)&2(1)+1(0)&2(1)+1(1)\\
+        1(2)+0(1)&1(1)+0(0)&1(1)+0(1)\\
+        1(2)+1(1)&1(1)+1(0)&1(1)+1(1)
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        5&2&3\\
+        2&1&1\\
+        3&1&2
+        \end{bmatrix}
+        \]
+      </div>
+      <p>Read entry \((1,3)=3\) as: the query made by “I” has compatibility \(3\) with the key made by “ML.” This is a learned-space score, not yet a probability.</p>
+
+      <h2>3 · Scale every logit by \(\sqrt{d_k}=\sqrt2\)</h2>
+      <div class="math"><span class="label">Scaled logits</span>
+        \[
+        S_1=\frac{Q_1K_1^\top}{\sqrt2}=
+        \begin{bmatrix}
+        3.5355&1.4142&2.1213\\
+        1.4142&0.7071&0.7071\\
+        2.1213&0.7071&1.4142
+        \end{bmatrix}
+        \]
+      </div>
+
+      <h2>4 · Apply softmax separately to each row</h2>
+      <p>For numerical stability, subtract the row maximum before exponentiating. This changes neither the probabilities nor their ordering.</p>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Query 1</strong>\([3.5355,1.4142,2.1213]-3.5355=[0,-2.1213,-1.4142]\)</div>
+        <div class="calc-line"><strong>Exponentials</strong>\([1,0.1199,0.2431]\), denominator \(=1.3630\), so \(a_1=[0.7337,0.0879,0.1784]\)</div>
+        <div class="calc-line"><strong>Query 2</strong>\([1.4142,0.7071,0.7071]-1.4142=[0,-0.7071,-0.7071]\)</div>
+        <div class="calc-line"><strong>Exponentials</strong>\([1,0.4931,0.4931]\), denominator \(=1.9862\), so \(a_2=[0.5035,0.2483,0.2483]\)</div>
+        <div class="calc-line"><strong>Query 3</strong>\([2.1213,0.7071,1.4142]-2.1213=[0,-1.4142,-0.7071]\)</div>
+        <div class="calc-line"><strong>Exponentials</strong>\([1,0.2431,0.4931]\), denominator \(=1.7362\), so \(a_3=[0.5760,0.1400,0.2840]\)</div>
+      </div>
+      <div class="math"><span class="label">Head 1 attention matrix</span>
+        \[
+        A_1=\operatorname{softmax}_{\text{row}}(S_1)=
+        \begin{bmatrix}
+        0.7337&0.0879&0.1784\\
+        0.5035&0.2483&0.2483\\
+        0.5760&0.1400&0.2840
+        \end{bmatrix}
+        \]
+      </div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Head 1 attention heatmap</strong><span>Darker cells carry more value weight</span></div>
+        <div class="diagram-body">
+          <div class="attention-map" role="table" aria-label="Head 1 attention weights">
+            <div class="head">query ↓ / key →</div><div class="head">I</div><div class="head">love</div><div class="head">ML</div>
+            <div class="row-label">I</div><div class="heat" style="--heat:73%">0.7337</div><div class="heat" style="--heat:9%">0.0879</div><div class="heat" style="--heat:18%">0.1784</div>
+            <div class="row-label">love</div><div class="heat" style="--heat:50%">0.5035</div><div class="heat" style="--heat:25%">0.2483</div><div class="heat" style="--heat:25%">0.2483</div>
+            <div class="row-label">ML</div><div class="heat" style="--heat:58%">0.5760</div><div class="heat" style="--heat:14%">0.1400</div><div class="heat" style="--heat:28%">0.2840</div>
+          </div>
+        </div>
+        <figcaption>Rows—not columns—sum to one. For example, the query at “love” routes roughly 50.35% of its value mixture to token 1.</figcaption>
+      </figure>
+
+      <h2>5 · Multiply attention weights by values</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Output 1</strong>\(h_1=0.7337[2,-1]+0.0879[0.5,1.5]+0.1784[1,1]=[1.6897,-0.4234]\)</div>
+        <div class="calc-line"><strong>Output 2</strong>\(h_2=0.5035[2,-1]+0.2483[0.5,1.5]+0.2483[1,1]=[1.3794,0.1171]\)</div>
+        <div class="calc-line"><strong>Output 3</strong>\(h_3=0.5760[2,-1]+0.1400[0.5,1.5]+0.2840[1,1]=[1.5060,-0.0819]\)</div>
+      </div>
+      <div class="math"><span class="label">Final output of head 1</span>
+        \[
+        H_1=A_1V_1=
+        \begin{bmatrix}
+        1.6897&-0.4234\\
+        1.3794&0.1171\\
+        1.5060&-0.0819
+        \end{bmatrix},
+        \qquad H_1:[3,2]
+        \]
+      </div>
+
+      <div class="quiz"><h3>Dimension check</h3><p>Why does \(A_1:[3,3]\) times \(V_1:[3,2]\) produce three rows rather than two?</p><button data-answer="self-dim-q">Reveal answer</button><div class="answer" id="self-dim-q">Matrix multiplication contracts the shared inner token axis \(3\): \([3,3][3,2]\to[3,2]\). The first 3 is the number of queries, so one output row remains for each query token. The final 2 is the value width.</div></div>
+    </div></section>
+
+    <section class="tab" id="mha-worked"><div class="page">
+      <div class="eyebrow">Worked example B · complete two-head MHA</div>
+      <h1>A second head learns a different attention map.</h1>
+      <p class="lede">Head 1 is already complete. We now calculate head 2, concatenate both head outputs, apply \(W^O\), add the residual, and normalize one row numerically.</p>
+
+      <h2>1 · Project the same \(X\) with head 2 parameters</h2>
+      <div class="math"><span class="label">Head 2 parameter matrices</span>
+        \[
+        W_2^Q=
+        \begin{bmatrix}
+        0&1\\
+        1&0\\
+        1&-1\\
+        -1&1
+        \end{bmatrix},
+        \quad
+        W_2^K=
+        \begin{bmatrix}
+        1&0\\
+        0&1\\
+        -1&1\\
+        1&-1
+        \end{bmatrix},
+        \quad
+        W_2^V=
+        \begin{bmatrix}
+        0&1\\
+        1&0\\
+        1&1\\
+        -1&1
+        \end{bmatrix}
+        \]
+      </div>
+
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(q_1^{(2)}\)</strong>\([1,0,1,0]W_2^Q=[0,1]+[1,-1]=[1,0]\)</div>
+        <div class="calc-line"><strong>\(q_2^{(2)}\)</strong>\([0,1,0,1]W_2^Q=[1,0]+[-1,1]=[0,1]\)</div>
+        <div class="calc-line"><strong>\(q_3^{(2)}\)</strong>\([1,1,0,0]W_2^Q=[0,1]+[1,0]=[1,1]\)</div>
+        <div class="calc-line"><strong>\(k_1^{(2)}\)</strong>\([1,0,1,0]W_2^K=[1,0]+[-1,1]=[0,1]\)</div>
+        <div class="calc-line"><strong>\(k_2^{(2)}\)</strong>\([0,1,0,1]W_2^K=[0,1]+[1,-1]=[1,0]\)</div>
+        <div class="calc-line"><strong>\(k_3^{(2)}\)</strong>\([1,1,0,0]W_2^K=[1,0]+[0,1]=[1,1]\)</div>
+        <div class="calc-line"><strong>\(v_1^{(2)}\)</strong>\([1,0,1,0]W_2^V=[0,1]+[1,1]=[1,2]\)</div>
+        <div class="calc-line"><strong>\(v_2^{(2)}\)</strong>\([0,1,0,1]W_2^V=[1,0]+[-1,1]=[0,1]\)</div>
+        <div class="calc-line"><strong>\(v_3^{(2)}\)</strong>\([1,1,0,0]W_2^V=[0,1]+[1,0]=[1,1]\)</div>
+      </div>
+      <div class="math"><span class="label">Head 2 projected tensors</span>
+        \[
+        Q_2=
+        \begin{bmatrix}1&0\\0&1\\1&1\end{bmatrix},
+        \qquad
+        K_2=
+        \begin{bmatrix}0&1\\1&0\\1&1\end{bmatrix},
+        \qquad
+        V_2=
+        \begin{bmatrix}1&2\\0&1\\1&1\end{bmatrix}
+        \]
+      </div>
+
+      <h2>2 · Dot products, scaling, and softmax for head 2</h2>
+      <div class="math"><span class="label">All nine head 2 scores</span>
+        \[
+        Q_2K_2^\top=
+        \begin{bmatrix}
+        1(0)+0(1)&1(1)+0(0)&1(1)+0(1)\\
+        0(0)+1(1)&0(1)+1(0)&0(1)+1(1)\\
+        1(0)+1(1)&1(1)+1(0)&1(1)+1(1)
+        \end{bmatrix}
+        =
+        \begin{bmatrix}
+        0&1&1\\
+        1&0&1\\
+        1&1&2
+        \end{bmatrix}
+        \]
+        \[
+        S_2=\frac{Q_2K_2^\top}{\sqrt2}=
+        \begin{bmatrix}
+        0&0.7071&0.7071\\
+        0.7071&0&0.7071\\
+        0.7071&0.7071&1.4142
+        \end{bmatrix}
+        \]
+      </div>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Query 1</strong>Subtract \(0.7071\): exponentials \([0.4931,1,1]\), sum \(2.4931\) → \([0.1978,0.4011,0.4011]\)</div>
+        <div class="calc-line"><strong>Query 2</strong>Exponentials \([1,0.4931,1]\), sum \(2.4931\) → \([0.4011,0.1978,0.4011]\)</div>
+        <div class="calc-line"><strong>Query 3</strong>Subtract \(1.4142\): exponentials \([0.4931,0.4931,1]\), sum \(1.9862\) → \([0.2483,0.2483,0.5035]\)</div>
+      </div>
+      <div class="math"><span class="label">Head 2 attention matrix</span>
+        \[
+        A_2=
+        \begin{bmatrix}
+        0.1978&0.4011&0.4011\\
+        0.4011&0.1978&0.4011\\
+        0.2483&0.2483&0.5035
+        \end{bmatrix}
+        \]
+      </div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Head 2 attention heatmap</strong><span>Compare with head 1’s different pattern</span></div>
+        <div class="diagram-body">
+          <div class="attention-map" role="table" aria-label="Head 2 attention weights">
+            <div class="head">query ↓ / key →</div><div class="head">I</div><div class="head">love</div><div class="head">ML</div>
+            <div class="row-label">I</div><div class="heat" style="--heat:20%">0.1978</div><div class="heat" style="--heat:40%">0.4011</div><div class="heat" style="--heat:40%">0.4011</div>
+            <div class="row-label">love</div><div class="heat" style="--heat:40%">0.4011</div><div class="heat" style="--heat:20%">0.1978</div><div class="heat" style="--heat:40%">0.4011</div>
+            <div class="row-label">ML</div><div class="heat" style="--heat:25%">0.2483</div><div class="heat" style="--heat:25%">0.2483</div><div class="heat" style="--heat:50%">0.5035</div>
+          </div>
+        </div>
+        <figcaption>Head 1’s first query favored “I” with weight 0.7337. Head 2’s first query instead splits most mass between “love” and “ML.” Multiple heads permit both patterns at once.</figcaption>
+      </figure>
+
+      <h2>3 · Mix head 2 values</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Output 1</strong>\(0.1978[1,2]+0.4011[0,1]+0.4011[1,1]=[0.5989,1.1978]\)</div>
+        <div class="calc-line"><strong>Output 2</strong>\(0.4011[1,2]+0.1978[0,1]+0.4011[1,1]=[0.8022,1.4011]\)</div>
+        <div class="calc-line"><strong>Output 3</strong>\(0.2483[1,2]+0.2483[0,1]+0.5035[1,1]=[0.7517,1.2483]\)</div>
+      </div>
+      <div class="math"><span class="label">Head 2 output</span>
+        \[
+        H_2=A_2V_2=
+        \begin{bmatrix}
+        0.5989&1.1978\\
+        0.8022&1.4011\\
+        0.7517&1.2483
+        \end{bmatrix}
+        \]
+      </div>
+
+      <h2>4 · Concatenate heads along the feature axis</h2>
+      <div class="math"><span class="label">No averaging between heads</span>
+        \[
+        C=\operatorname{Concat}(H_1,H_2)=
+        \begin{bmatrix}
+        1.6897&-0.4234&0.5989&1.1978\\
+        1.3794&0.1171&0.8022&1.4011\\
+        1.5060&-0.0819&0.7517&1.2483
+        \end{bmatrix},
+        \qquad C:[3,4]
+        \]
+      </div>
+      <p>The first two columns come from head 1; the last two come from head 2. Concatenating two \(d_v=2\) heads gives \(h\,d_v=4\) features per token.</p>
+
+      <h2>5 · Mix head features with \(W^O\)</h2>
+      <div class="math"><span class="label">Output projection</span>
+        \[
+        W^O=
+        \begin{bmatrix}
+        1&0&0&0.5\\
+        0&1&0.5&0\\
+        0.5&0&1&0\\
+        0&0.5&0&1
+        \end{bmatrix}
+        \]
+        \[
+        [a,b,c,d]W^O=[a+0.5c,\ b+0.5d,\ 0.5b+c,\ 0.5a+d]
+        \]
+      </div>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Token 1</strong>\([1.6897+0.5(0.5989),\ -0.4234+0.5(1.1978),\ 0.5(-0.4234)+0.5989,\ 0.5(1.6897)+1.1978]\)</div>
+        <div class="calc-line"><strong>Token 1 result</strong>\([1.9892,0.1755,0.3872,2.0426]\)</div>
+      </div>
+      <div class="math"><span class="label">Complete MHA output</span>
+        \[
+        Y=CW^O=
+        \begin{bmatrix}
+        1.9892&0.1755&0.3872&2.0426\\
+        1.7805&0.8177&0.8608&2.0908\\
+        1.8818&0.5422&0.7108&2.0012
+        \end{bmatrix},
+        \qquad Y:[3,4]
+        \]
+      </div>
+      <p class="plain-note">The component formula above applies to every row of \(C\); substituting rows 2 and 3 gives the remaining two rows of \(Y\). The output projection returns width \(d_{\text{model}}=4\), which makes a residual addition to \(X\) possible.</p>
+
+      <h2>6 · Residual connection and LayerNorm</h2>
+      <p>The original Transformer uses post-normalization: \(\operatorname{LayerNorm}(X+\operatorname{MHA}(X))\). Many modern models use pre-normalization instead, but the attention arithmetic itself is unchanged.</p>
+      <div class="math"><span class="label">Residual addition</span>
+        \[
+        Z=X+Y=
+        \begin{bmatrix}
+        2.9892&0.1755&1.3872&2.0426\\
+        1.7805&1.8177&0.8608&3.0908\\
+        2.8818&1.5422&0.7108&2.0012
+        \end{bmatrix}
+        \]
+      </div>
+      <div class="calc-list">
+        <div class="calc-line"><strong>Row 1 mean</strong>\(\mu=(2.9892+0.1755+1.3872+2.0426)/4=1.6486\)</div>
+        <div class="calc-line"><strong>Row 1 variance</strong>\(\sigma^2=\big((2.9892-\mu)^2+(0.1755-\mu)^2+(1.3872-\mu)^2+(2.0426-\mu)^2\big)/4=1.0477\)</div>
+        <div class="calc-line"><strong>Row 1 scale</strong>\(\sqrt{\sigma^2+\epsilon}=\sqrt{1.0477+10^{-5}}=1.0236\)</div>
+        <div class="calc-line"><strong>Row 1 normalized</strong>\((Z_1-\mu)/1.0236=[1.3097,-1.4392,-0.2554,0.3849]\)</div>
+      </div>
+      <div class="math"><span class="label">LayerNorm with \(\gamma=1,\ \beta=0,\ \epsilon=10^{-5}\)</span>
+        \[
+        \operatorname{LN}(Z)\approx
+        \begin{bmatrix}
+        1.3097&-1.4392&-0.2554&0.3849\\
+        -0.1348&-0.0879&-1.2939&1.5166\\
+        1.3991&-0.3082&-1.3678&0.2768
+        \end{bmatrix}
+        \]
+      </div>
+      <div class="callout blue"><strong>What was learned?</strong><p>All \(W_r^Q,W_r^K,W_r^V,W^O\) entries—and LayerNorm’s \(\gamma,\beta\)—are learned by backpropagation. The hand-picked values here exist only so every intermediate number can be inspected.</p></div>
+    </div></section>
+
+    <section class="tab" id="shapes"><div class="page">
+      <div class="eyebrow">Engineering view · batch and head axes</div>
+      <h1>Production tensors add two axes, not new math.</h1>
+      <p class="lede">Libraries keep batch and head axes explicit for the attention matmuls. A common implementation packs all projection weights into one QKV linear layer, then reshapes rather than looping over heads.</p>
+
+      <h2>A realistic shape ledger</h2>
+      <p>Take \(B=32\), \(n=128\), \(d_{\text{model}}=512\), \(h=8\), and \(d_k=d_v=64\). This matches the original Transformer base head widths.</p>
+      <div class="table-wrap compact-table"><table><thead><tr><th>Tensor</th><th>Symbolic shape</th><th>Concrete shape</th><th>Number of values</th><th>Meaning</th></tr></thead><tbody>
+        <tr><td>Input \(X\)</td><td>\([B,n,d_{\text{model}}]\)</td><td>\([32,128,512]\)</td><td>2,097,152</td><td>512 features for every token in every sequence</td></tr>
+        <tr><td>Packed QKV</td><td>\([B,n,3d_{\text{model}}]\)</td><td>\([32,128,1536]\)</td><td>6,291,456</td><td>One fused linear output before splitting</td></tr>
+        <tr><td>\(Q,K,V\) each</td><td>\([B,h,n,d_k]\)</td><td>\([32,8,128,64]\)</td><td>2,097,152 each</td><td>Batch × head × position × head feature</td></tr>
+        <tr><td>Scores / weights</td><td>\([B,h,n,n]\)</td><td>\([32,8,128,128]\)</td><td>4,194,304 each</td><td>One key distribution per batch, head, and query</td></tr>
+        <tr><td>Head contexts</td><td>\([B,h,n,d_v]\)</td><td>\([32,8,128,64]\)</td><td>2,097,152</td><td>Weighted values before concatenation</td></tr>
+        <tr><td>Concatenated / output</td><td>\([B,n,h\,d_v]\)</td><td>\([32,128,512]\)</td><td>2,097,152</td><td>Head axis folded back into features</td></tr>
+      </tbody></table></div>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>One score tensor</b>\[32\cdot8\cdot128\cdot128=4{,}194{,}304\]<p>About 16 MiB in FP32 or 8 MiB in FP16/BF16—before gradients and other saved tensors.</p></div>
+        <div class="formula-card"><b>Attention projection weights</b>\[512(3\cdot512)+512^2=1{,}048{,}576\]<p>QKV plus output weights, excluding 2,048 optional bias values.</p></div>
+      </div>
+
+      <h2>What reshape and transpose actually do</h2>
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Packed implementation data flow</strong><span>No Python loop over heads</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["X<br/>B × n × d"] --> LIN["QKV linear<br/>d × 3d"]
+  LIN --> PACK["B × n × 3 × h × d_h"]
+  PACK --> MOVE["move axes<br/>3 × B × h × n × d_h"]
+  MOVE --> Q["Q<br/>B × h × n × d_h"]
+  MOVE --> K["K<br/>B × h × n × d_h"]
+  MOVE --> V["V<br/>B × h × n × d_h"]
+  Q --> SCORE["Q @ Kᵀ<br/>B × h × n × n"]
+  K --> SCORE
+  SCORE --> A["scale + mask + softmax"]
+  A --> CTX["A @ V<br/>B × h × n × d_h"]
+  V --> CTX
+  CTX --> FOLD["transpose + reshape<br/>B × n × d"]
+  FOLD --> OUT["output linear<br/>B × n × d"]
+  class X input; class LIN,OUT param; class PACK,MOVE,FOLD op; class Q,K,V param; class SCORE,CTX op; class A route;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef op fill:#dfe8f1,stroke:#3b5f8a,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Transpose changes axis order, not values. Reshape is valid after the required contiguous/layout handling; frameworks often hide those memory details.</figcaption>
+      </figure>
+
+      <h2>Reference pseudocode with every shape</h2>
+      <div class="math"><span class="label">PyTorch-like pseudocode; \(d_h=d_{\text{model}}/h\)</span>
+<pre><code>x                 # [B, n, d_model]
+qkv = qkv_linear(x)                     # [B, n, 3*d_model]
+qkv = qkv.reshape(B, n, 3, h, d_h)      # [B, n, 3, h, d_h]
+qkv = qkv.permute(2, 0, 3, 1, 4)        # [3, B, h, n, d_h]
+q, k, v = qkv[0], qkv[1], qkv[2]        # each [B, h, n, d_h]
+
+scores = q @ k.transpose(-2, -1)         # [B, h, n, n]
+scores = scores / sqrt(d_h)
+scores = scores + mask                   # broadcastable to [B, h, n, n]
+weights = softmax(scores, dim=-1)        # normalize over key positions
+heads = weights @ v                      # [B, h, n, d_h]
+
+concat = heads.transpose(1, 2)           # [B, n, h, d_h]
+concat = concat.reshape(B, n, d_model)   # [B, n, d_model]
+out = output_linear(concat)              # [B, n, d_model]</code></pre>
+      </div>
+
+      <h2>Compute and memory scaling</h2>
+      <div class="table-wrap"><table><thead><tr><th>Operation</th><th>Approximate multiply-accumulates</th><th>Growth</th><th>At the concrete shape</th></tr></thead><tbody>
+        <tr><td>QKV projections</td><td>\(3Bnd_{\text{model}}^2\)</td><td>Linear in \(n\), quadratic in width</td><td>3.22 billion</td></tr>
+        <tr><td>All \(QK^\top\)</td><td>\(Bhn^2d_k=Bn^2d_{\text{model}}\)</td><td>Quadratic in \(n\)</td><td>268.44 million</td></tr>
+        <tr><td>All \(AV\)</td><td>\(Bhn^2d_v\)</td><td>Quadratic in \(n\)</td><td>268.44 million</td></tr>
+        <tr><td>Output projection</td><td>\(Bnd_{\text{model}}^2\)</td><td>Linear in \(n\), quadratic in width</td><td>1.07 billion</td></tr>
+      </tbody></table></div>
+      <p class="plain-note">A full dense MHA implementation is therefore \(O(nd_{\text{model}}^2+n^2d_{\text{model}})\) per sequence, with an explicit score/weight memory term \(O(hn^2)\). At modest lengths, projections may dominate compute; at long lengths, the quadratic attention terms dominate.</p>
+
+      <h2>Cross-attention changes the two length axes</h2>
+      <div class="math"><span class="label">Queries and memory can have different lengths</span>
+        \[
+        Q:[B,h,n_q,d_k],\qquad
+        K,V:[B,h,n_{kv},d_k\text{ or }d_v]
+        \]
+        \[
+        QK^\top:[B,h,n_q,n_{kv}],\qquad
+        AV:[B,h,n_q,d_v]
+        \]
+      </div>
+      <p>Self-attention is the special case \(n_q=n_{kv}=n\) with all three projections sourced from the same sequence.</p>
+    </div></section>
+
+    <section class="tab" id="pitfalls"><div class="page">
+      <div class="eyebrow">Reasoning and debugging</div>
+      <h1>Most attention bugs are axis bugs.</h1>
+      <p class="lede">The formulas are short; implementations fail when token, head, batch, and feature axes are confused—or when a mathematically valid operation means something different from the intended one.</p>
+
+      <h2>Three attention modes</h2>
+      <div class="table-wrap"><table><thead><tr><th>Mode</th><th>Queries from</th><th>Keys / values from</th><th>Score shape</th><th>Typical mask</th></tr></thead><tbody>
+        <tr><td>Bidirectional self-attention</td><td>Sequence \(X\)</td><td>Same sequence \(X\)</td><td>\([n,n]\)</td><td>Padding only</td></tr>
+        <tr><td>Causal self-attention</td><td>Sequence \(X\)</td><td>Same sequence \(X\)</td><td>\([n,n]\)</td><td>Lower-triangular + padding</td></tr>
+        <tr><td>Cross-attention</td><td>Target / decoder states</td><td>Source / encoder memory</td><td>\([n_q,n_{kv}]\)</td><td>Usually source padding</td></tr>
+      </tbody></table></div>
+
+      <h2>Common mistakes</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Softmax over queries</b><span>Using the wrong axis makes columns sum to one. Normalize over keys: typically <code>dim=-1</code>.</span></div>
+        <div class="caveat"><b>Scaling by \(\sqrt{d_{\text{model}}}\)</b><span>The dot product has \(d_k\) terms, so the denominator is \(\sqrt{d_k}\), the per-head key width.</span></div>
+        <div class="caveat"><b>Masking after softmax</b><span>Forbidden positions may retain mass or rows stop summing to one. Mask logits first.</span></div>
+        <div class="caveat"><b>Multiplying weights by \(K\)</b><span>Keys determine routing; values carry content. The output is \(AV\), not \(AK\), unless a model deliberately ties them.</span></div>
+        <div class="caveat"><b>Dropping the output projection</b><span>Concatenation alone leaves heads isolated. \(W^O\) mixes their feature subspaces and restores residual width.</span></div>
+        <div class="caveat"><b>Forgetting positions</b><span>Content-only self-attention cannot distinguish permutations except through other order signals.</span></div>
+        <div class="caveat"><b>Assuming \(d_k=d_v\) is required</b><span>It is common, not mandatory. Query and key widths must match each other; value width may differ.</span></div>
+        <div class="caveat"><b>All-masked rows</b><span>Softmax of all \(-\infty\) is undefined. Avoid such rows or handle padded query outputs explicitly.</span></div>
+      </div>
+
+      <h2>Invariants that catch bugs quickly</h2>
+      <div class="grid2">
+        <div class="note"><div class="check-row"><div><h3>Rows sum to one.</h3><p>For every valid batch/head/query row, \(\sum_jA_{ij}\approx1\).</p></div></div></div>
+        <div class="note"><div class="check-row"><div><h3>Masked weights are zero.</h3><p>Inspect probabilities, not merely masked logits.</p></div></div></div>
+        <div class="note"><div class="check-row"><div><h3>Shapes survive round trips.</h3><p>Splitting and recombining heads must return \([B,n,d_{\text{model}}]\).</p></div></div></div>
+        <div class="note"><div class="check-row"><div><h3>Weights are nonnegative.</h3><p>Softmax produces \(A_{ij}\ge0\); negative values can still make outputs negative.</p></div></div></div>
+        <div class="note"><div class="check-row"><div><h3>Identical values stay identical.</h3><p>If all \(v_j=c\), then every valid \(h_i=c\), regardless of attention weights.</p></div></div></div>
+        <div class="note"><div class="check-row"><div><h3>Causal prefixes are stable.</h3><p>Changing a future token must not change earlier causal outputs.</p></div></div></div>
+      </div>
+
+      <h2>What attention weights do not prove</h2>
+      <div class="grid2">
+        <div class="concept"><h3>Not automatically an explanation</h3><p>A high weight says a value contributed strongly in that head at that layer. Residual paths, value projections, later layers, and nonlinearities still shape the prediction.</p></div>
+        <div class="concept"><h3>Not guaranteed head specialization</h3><p>Heads can become redundant, diffuse, or difficult to label. “One syntax head, one entity head” is an intuition, not a training constraint.</p></div>
+        <div class="concept"><h3>Not the entire Transformer block</h3><p>Attention moves information across positions. Position-wise feed-forward networks transform features within each position.</p></div>
+        <div class="concept"><h3>Not cheap at every sequence length</h3><p>Dense score and weight matrices grow quadratically with \(n\), motivating local, sparse, linear, and fused attention methods.</p></div>
+      </div>
+
+      <h2>Subtleties in real implementations</h2>
+      <div class="timeline">
+        <div class="event"><b>Numerical stability</b><strong>Subtract maxima inside softmax.</strong><p>Framework softmax kernels do this; mixed-precision implementations may accumulate or upcast selected operations.</p></div>
+        <div class="event"><b>Dropout</b><strong>Training may drop attention probabilities.</strong><p>Dropout is often applied to \(A\) after softmax. Surviving probabilities are rescaled during training, so a sampled row need not visually sum to one.</p></div>
+        <div class="event"><b>Fused kernels</b><strong>The full \(n\times n\) matrix need not be materialized.</strong><p>Exact fused algorithms can tile Q/K/V and compute softmax online, reducing memory traffic while preserving the mathematical result.</p></div>
+        <div class="event"><b>Grouped-query variants</b><strong>Query heads may outnumber key/value heads.</strong><p>Multi-query and grouped-query attention share K/V projections across groups to reduce cache size. Standard MHA uses equal Q, K, and V head counts.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Debugging question</h3><p>Your attention tensor has shape \([B,h,n,n]\), but each column sums to one and each row does not. What is the most likely mistake?</p><button data-answer="attn-axis-q">Reveal answer</button><div class="answer" id="attn-axis-q">Softmax was applied over the query axis (the second-to-last axis) instead of the key axis (the last axis). Use row-wise softmax over key positions.</div></div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>Self-attention and MHA on one sheet.</h1>
+      <p class="lede">Start with the axes, derive the score matrix, then explain how heads separate routing patterns and return to residual width.</p>
+
+      <div class="table-wrap compact-table"><table><thead><tr><th>Concept</th><th>Memory hook</th><th>Exact statement</th></tr></thead><tbody>
+        <tr><td>Input</td><td>Rows are tokens</td><td>\(X:[B,n,d_{\text{model}}]\)</td></tr>
+        <tr><td>Projections</td><td>Seek, match, send</td><td>\(Q=XW^Q,\ K=XW^K,\ V=XW^V\)</td></tr>
+        <tr><td>Raw scores</td><td>Every query vs every key</td><td>\(R=QK^\top:[B,h,n,n]\)</td></tr>
+        <tr><td>Scaling</td><td>Control dot magnitude</td><td>\(S=R/\sqrt{d_k}\)</td></tr>
+        <tr><td>Mask</td><td>Illegal means \(-\infty\)</td><td>Add \(M\) before softmax</td></tr>
+        <tr><td>Softmax</td><td>One distribution per query</td><td>\(A=\operatorname{softmax}(S+M,\text{key axis})\)</td></tr>
+        <tr><td>Value mixing</td><td>Keys route; values move</td><td>\(H=AV:[B,h,n,d_v]\)</td></tr>
+        <tr><td>Self-attention</td><td>Same source</td><td>Q, K, and V are projected from the same sequence</td></tr>
+        <tr><td>Multi-head</td><td>Several routing spaces</td><td>\(\operatorname{Concat}(H_1,\ldots,H_h)W^O\)</td></tr>
+        <tr><td>Head width</td><td>Split model features</td><td>Commonly \(d_k=d_v=d_{\text{model}}/h\)</td></tr>
+        <tr><td>Residual</td><td>Return to model width</td><td>\(W^O:[h\,d_v,d_{\text{model}}]\) enables addition to \(X\)</td></tr>
+        <tr><td>Dense cost</td><td>Length squares</td><td>Core attention \(O(n^2d_{\text{model}})\), score memory \(O(hn^2)\)</td></tr>
+      </tbody></table></div>
+
+      <h2>Shape derivation in five lines</h2>
+      <div class="math"><span class="label">Suppressing batch and head axes</span>
+        \[
+        X[n,d_{\text{model}}]\,W^Q[d_{\text{model}},d_k]\to Q[n,d_k]
+        \]
+        \[
+        Q[n,d_k]\,K^\top[d_k,n]\to R[n,n]
+        \]
+        \[
+        \operatorname{softmax}_{\text{keys}}(R/\sqrt{d_k}+M)\to A[n,n]
+        \]
+        \[
+        A[n,n]\,V[n,d_v]\to H[n,d_v]
+        \]
+        \[
+        \operatorname{Concat}(H_1,\ldots,H_h)[n,h\,d_v]\,W^O[h\,d_v,d_{\text{model}}]\to Y[n,d_{\text{model}}]
+        \]
+      </div>
+
+      <h2>Interview drill</h2>
+      <div class="grid2">
+        <div class="note"><h3>Why scale by \(\sqrt{d_k}\)?</h3><p>A dot product of \(d_k\) unit-variance terms has variance \(d_k\). Scaling prevents increasingly saturated softmax logits.</p></div>
+        <div class="note"><h3>Why separate K and V?</h3><p>The representation useful for deciding relevance need not be the representation useful to transfer after relevance is decided.</p></div>
+        <div class="note"><h3>Which axis gets softmax?</h3><p>The key/source axis. Each query row chooses a distribution over keys.</p></div>
+        <div class="note"><h3>Why use multiple heads?</h3><p>Different projections and softmaxes let the layer route through multiple representation subspaces simultaneously.</p></div>
+        <div class="note"><h3>Why is \(W^O\) needed?</h3><p>It mixes concatenated head features and returns the result to \(d_{\text{model}}\) for the residual stream.</p></div>
+        <div class="note"><h3>Where does quadratic cost arise?</h3><p>Every query-key pair creates a score, producing \(n^2\) entries per head.</p></div>
+      </div>
+
+      <h2>Numbers worth reconstructing</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Head 1</b>
+          \[
+          Q_1K_1^\top=
+          \begin{bmatrix}5&2&3\\2&1&1\\3&1&2\end{bmatrix}
+          \]
+          <p>After scaling, row 1 softmax is \([0.7337,0.0879,0.1784]\).</p>
+        </div>
+        <div class="formula-card"><b>Head 2</b>
+          \[
+          Q_2K_2^\top=
+          \begin{bmatrix}0&1&1\\1&0&1\\1&1&2\end{bmatrix}
+          \]
+          <p>After scaling, row 1 softmax is \([0.1978,0.4011,0.4011]\).</p>
+        </div>
+      </div>
+
+      <div class="quiz"><h3>Five-part self-test</h3><p>1. Derive the shape of \(QK^\top\).<br>2. Explain why softmax is row-wise.<br>3. Compute the causal weights for logits \([2,1,-\infty]\).<br>4. Explain concatenation versus averaging heads.<br>5. Name two implementation invariants.</p><button data-answer="attn-final-q">Reveal compact answers</button><div class="answer" id="attn-final-q">1. \([n,d_k][d_k,n]=[n,n]\). 2. Each query must distribute its mass over keys. 3. Subtract 2: \([1,e^{-1},0]/(1+e^{-1})\approx[0.7311,0.2689,0]\). 4. Concatenation preserves every head’s features; \(W^O\) then learns how to mix them. 5. Examples: rows sum to one, masked weights are zero, output shape returns to \([B,n,d_{\text{model}}]\), or future changes cannot affect earlier causal outputs.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room</div>
+      <h1>Primary source and calculation notes.</h1>
+      <p class="lede">The original paper’s attention sections are short. Read them after reproducing the numerical example once; the symbols will then map directly to operations.</p>
+
+      <div class="paper"><div><strong>Attention Is All You Need</strong>Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Łukasz Kaiser, Illia Polosukhin · NeurIPS 2017 · arXiv v7</div><div class="paper-links"><a href="papers/Attention-Is-All-You-Need.pdf">Local PDF</a><a href="https://arxiv.org/abs/1706.03762">arXiv</a></div></div>
+
+      <h2>Suggested paper path</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · §3.2</b><strong>Attention definition</strong><p>Start with query/key/value language and the weighted-sum interpretation.</p></div>
+        <div class="event"><b>2 · §3.2.1</b><strong>Scaled dot-product attention</strong><p>Match Equation 1 to \(QK^\top\), \(\sqrt{d_k}\), row-wise softmax, and \(V\).</p></div>
+        <div class="event"><b>3 · §3.2.2</b><strong>Multi-head attention</strong><p>Trace the per-head projections, concatenation, \(W^O\), and the paper’s \(h=8,\ d_k=d_v=64\) setup.</p></div>
+        <div class="event"><b>4 · §3.2.3</b><strong>Three applications</strong><p>Contrast encoder self-attention, masked decoder self-attention, and encoder-decoder cross-attention.</p></div>
+        <div class="event"><b>5 · §3.5 and §4</b><strong>Position and complexity</strong><p>Connect positional encoding to order and Table 1 to the \(n^2\) dense-attention term.</p></div>
+      </div>
+
+      <h2>How the worked example was checked</h2>
+      <div class="grid2">
+        <div class="note"><h3>Exact construction</h3><p>The embeddings and projection matrices are original teaching values, selected to keep \(Q,K,V\) and raw dot products small and inspectable.</p></div>
+        <div class="note"><h3>Numerical verification</h3><p>Softmax, both head outputs, concatenation, \(W^O\), residual addition, and LayerNorm were independently recomputed at full floating-point precision.</p></div>
+        <div class="note"><h3>Rounding</h3><p>Displays use four decimals after exponentials. Downstream displayed results come from unrounded intermediate values.</p></div>
+        <div class="note"><h3>Scope</h3><p>Dropout and learned LayerNorm scale/shift are explained but disabled in the arithmetic so the core transformations remain visible.</p></div>
+      </div>
+
+      <h2>Notation map</h2>
+      <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>Meaning</th><th>Our value</th><th>Original base Transformer</th></tr></thead><tbody>
+        <tr><td>\(B\)</td><td>Batch size</td><td>1</td><td>Training-dependent</td></tr>
+        <tr><td>\(n\)</td><td>Sequence length</td><td>3</td><td>Variable</td></tr>
+        <tr><td>\(d_{\text{model}}\)</td><td>Residual / embedding width</td><td>4</td><td>512</td></tr>
+        <tr><td>\(h\)</td><td>Number of heads</td><td>2</td><td>8</td></tr>
+        <tr><td>\(d_k,d_v\)</td><td>Per-head key and value widths</td><td>2, 2</td><td>64, 64</td></tr>
+        <tr><td>\(A\)</td><td>Attention weights</td><td>\([3,3]\) per head</td><td>\([n,n]\) per head</td></tr>
+      </tbody></table></div>
+
+      <div class="callout"><strong>Accuracy note</strong><p>Core equations, projection dimensions, masking behavior, the original \(d_{\text{model}}=512,\ h=8,\ d_k=d_v=64\) configuration, and the paper-reading path were checked against the downloaded primary paper. All miniature embeddings and numeric matrices are explicitly labeled as teaching constructions.</p></div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+</body>
+</html>

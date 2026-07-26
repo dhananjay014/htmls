@@ -7,6 +7,7 @@ files = if ARGV.empty?
     "ML - Semantic IDs/index.html",
     "ML - Multimodal MMoE/index.html",
     "ML - OneRec/index.html",
+    "ML - Self Attention and Multi-Head Attention/index.html",
     "RL - PPO and GRPO/index.html"
   ].map { |file| File.join(root, file) }
 else

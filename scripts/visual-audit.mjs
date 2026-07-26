@@ -17,6 +17,7 @@ const preferredShots = new Map([
   ["ML - Semantic IDs", "rqvae"],
   ["ML - Multimodal MMoE", "shazeer"],
   ["ML - OneRec", "ipa"],
+  ["ML - Self Attention and Multi-Head Attention", "mha-worked"],
   ["RL - PPO and GRPO", "grpo"]
 ]);
 
