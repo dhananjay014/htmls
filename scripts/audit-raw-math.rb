@@ -11,6 +11,7 @@ files = if ARGV.empty?
     "ML - Activation Functions and SwiGLU/index.html",
     "ML - FlashAttention/index.html",
     "ML - BatchNorm vs LayerNorm/index.html",
+    "ML - Ranking Metrics/index.html",
     "RL - PPO and GRPO/index.html"
   ].map { |file| File.join(root, file) }
 else

@@ -22,6 +22,7 @@ const preferredShots = new Map([
   ["ML - Activation Functions and SwiGLU", "worked"],
   ["ML - FlashAttention", "worked"],
   ["ML - BatchNorm vs LayerNorm", "worked"],
+  ["ML - Ranking Metrics", "contrast"],
   ["RL - PPO and GRPO", "grpo"]
 ]);
 
@@ -161,7 +162,7 @@ async function collectMetrics(cdp) {
         scroll: element.scrollWidth
       }));
     const mermaids = active.flatMap((panel) => [...panel.querySelectorAll('.mermaid')]);
-    const math = active.flatMap((panel) => [...panel.querySelectorAll('.math')]);
+    const math = active.flatMap((panel) => [...panel.querySelectorAll('.math, [data-math-check]')]);
     const rawMath = [];
     active.forEach((panel) => {
       const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
@@ -213,6 +214,8 @@ async function smokeInteractions(cdp) {
     });
     const attention = all('[data-attention-mode]');
     if (attention[1]) attention[1].click();
+    const cutoffs = all('[data-k]');
+    if (cutoffs[1]) cutoffs[1].click();
     const answerButton = all('[data-answer]')[0];
     if (answerButton) answerButton.click();
     return {

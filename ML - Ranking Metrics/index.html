@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and mathematical guide to DCG, NDCG, ROC AUC, and Normalized Entropy.">
+  <title>Ranking Metrics · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
+  </script>
+  <link rel="stylesheet" href="../assets/guide.css">
+  <style>
+    .tab:not(#overview) h1 { max-width: 880px; font-size: clamp(38px, 4.2vw, 56px); line-height: 1.06; }
+    .metric-map {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin: 28px 0;
+      border: 1px solid #cfd2dc;
+      background: #cfd2dc;
+    }
+    .metric-map > div {
+      min-height: 188px;
+      padding: 19px;
+      background: white;
+    }
+    .metric-map b {
+      display: inline-grid;
+      min-width: 48px;
+      min-height: 32px;
+      place-items: center;
+      padding: 0 9px;
+      border: 1px solid var(--metric);
+      color: var(--metric);
+      font: 850 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .metric-map strong { display: block; margin-top: 15px; font: 650 19px/1.15 Georgia, serif; }
+    .metric-map p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+    .metric-map small { display: block; margin-top: 14px; color: #6c6f77; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+    .question-banner {
+      display: grid;
+      grid-template-columns: 152px 1fr;
+      align-items: center;
+      gap: 18px;
+      margin: 22px 0;
+      padding: 18px;
+      border-left: 4px solid var(--accent);
+      background: #ece9f4;
+    }
+    .question-banner b { color: var(--accent-dark); font-size: 11px; letter-spacing: .09em; text-transform: uppercase; }
+    .question-banner p { margin: 0; font: 650 20px/1.3 Georgia, serif; }
+    .rank-stack {
+      overflow-x: auto;
+      margin: 22px 0;
+      border: 1px solid #cfd2dc;
+      background: white;
+    }
+    .rank-row {
+      display: grid;
+      grid-template-columns: 70px 120px 110px 150px 150px minmax(150px, 1fr);
+      min-width: 800px;
+      align-items: center;
+      border-bottom: 1px solid #e1e2e8;
+    }
+    .rank-row:last-child { border-bottom: 0; }
+    .rank-row > div { padding: 12px 14px; }
+    .rank-row.head {
+      background: #eeedf3;
+      color: #5b5b65;
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+    .rank-row .rank { color: var(--accent-dark); font: 800 17px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .rank-row .grade {
+      display: inline-grid;
+      width: 31px;
+      height: 31px;
+      place-items: center;
+      border: 1px solid #6a4c93;
+      background: #ece5f4;
+      color: #543a76;
+      font-weight: 850;
+    }
+    .rank-row .contribution { font-weight: 800; }
+    .rank-row.outside { opacity: .35; }
+    .cutoff-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px 16px;
+      border-bottom: 1px solid #d8d9e0;
+      background: #f4f2f8;
+    }
+    .cutoff-control strong { font-size: 13px; }
+    .cutoff-buttons { display: flex; gap: 7px; }
+    .cutoff-buttons button {
+      padding: 7px 11px;
+      border: 1px solid #8d7aa6;
+      background: white;
+      color: #543a76;
+      cursor: pointer;
+      font-weight: 800;
+    }
+    .cutoff-buttons button.active { background: #6a4c93; color: white; }
+    .metric-result {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      border-top: 1px solid #cfd2dc;
+      background: #cfd2dc;
+    }
+    .metric-result > div { padding: 14px; background: #f8f8fa; }
+    .metric-result small { display: block; color: #666873; font-size: 9px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+    .metric-result strong { display: block; margin-top: 5px; font: 800 22px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .discount-bars {
+      display: grid;
+      gap: 10px;
+      margin: 22px 0;
+      padding: 18px;
+      border: 1px solid #d4d5dc;
+      background: white;
+    }
+    .discount-bar { display: grid; grid-template-columns: 72px 1fr 74px; align-items: center; gap: 12px; font-size: 12px; }
+    .discount-bar .track { height: 18px; background: #ececf0; }
+    .discount-bar .fill { height: 100%; width: calc(var(--weight) * 100%); background: #6a4c93; }
+    .discount-bar code { text-align: right; }
+    .auc-layout {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+      gap: 18px;
+      margin: 24px 0;
+    }
+    .pair-board, .roc-board { border: 1px solid #cdd4d0; background: white; }
+    .board-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 15px;
+      border-bottom: 1px solid #d8dcd9;
+      background: #edf1ef;
+      font-size: 11px;
+    }
+    .pair-grid {
+      display: grid;
+      grid-template-columns: 104px repeat(2, minmax(82px, 1fr));
+      margin: 15px;
+      border-top: 1px solid #d7dcd9;
+      border-left: 1px solid #d7dcd9;
+    }
+    .pair-grid > div {
+      display: grid;
+      min-height: 58px;
+      place-items: center;
+      padding: 7px;
+      border-right: 1px solid #d7dcd9;
+      border-bottom: 1px solid #d7dcd9;
+      text-align: center;
+      font-size: 11px;
+    }
+    .pair-grid .axis { background: #eef0ef; color: #4f5c55; font-weight: 800; }
+    .pair-grid .win { background: #e1eee7; color: #176b52; font-weight: 900; }
+    .pair-grid .loss { background: #f5e5e2; color: #a24b3f; font-weight: 900; }
+    .pair-summary { margin: 0 15px 15px; padding: 12px; background: #f5f4f8; font-size: 12px; }
+    .roc-board svg { display: block; width: 100%; height: auto; }
+    .roc-board figcaption { padding: 10px 15px 14px; border-top: 1px solid #d8dcd9; color: var(--muted); font-size: 11px; }
+    .ne-calc {
+      overflow-x: auto;
+      margin: 22px 0;
+      border: 1px solid #cfd4d1;
+      background: white;
+    }
+    .ne-row {
+      display: grid;
+      grid-template-columns: 90px 100px 120px minmax(210px, 1fr);
+      min-width: 610px;
+      border-bottom: 1px solid #e0e3e1;
+    }
+    .ne-row:last-child { border-bottom: 0; }
+    .ne-row > div { padding: 11px 13px; }
+    .ne-row.head { background: #eef0ef; color: #5e6862; font-size: 9px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+    .ne-row.total { background: #f4f1f8; font-weight: 800; }
+    .ne-meter {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1px;
+      margin: 18px 0;
+      border: 1px solid #cfd2dc;
+      background: #cfd2dc;
+    }
+    .ne-meter > div { padding: 17px; background: white; }
+    .ne-meter small { display: block; color: #666873; font-size: 9px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+    .ne-meter strong { display: block; margin-top: 7px; font: 800 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .calibration-lab {
+      margin: 24px 0;
+      border: 1px solid #bfc9c3;
+      background: white;
+      box-shadow: 0 10px 30px rgba(30, 39, 34, .06);
+    }
+    .calibration-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 15px 17px;
+      border-bottom: 1px solid #d1d8d4;
+      background: #e9efec;
+    }
+    .calibration-head strong { font-size: 13px; }
+    .calibration-head span { color: var(--muted); font-size: 11px; text-align: right; }
+    .calibration-body { padding: 18px; }
+    .calibration-body input { width: 100%; accent-color: #6a4c93; }
+    .scale-labels { display: flex; justify-content: space-between; color: #70757a; font-size: 10px; }
+    .prob-strip {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 7px;
+      margin-top: 17px;
+    }
+    .prob {
+      padding: 10px 7px;
+      border: 1px solid #d5d8d6;
+      background: #f8f8f8;
+      text-align: center;
+    }
+    .prob b { display: block; font-size: 10px; }
+    .prob code { display: block; margin-top: 5px; font-size: 12px; }
+    .prob.positive { border-top: 4px solid #176b52; }
+    .prob.negative { border-top: 4px solid #a24b3f; }
+    .lab-results {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 17px;
+      background: #cfd2dc;
+    }
+    .lab-results > div { padding: 13px; background: #f5f3f8; }
+    .lab-results small { display: block; color: #666873; font-size: 9px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+    .lab-results strong { display: block; margin-top: 5px; font: 800 21px/1 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .choice-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+    .choice {
+      padding: 18px;
+      border: 1px solid #d0d4d2;
+      border-top: 4px solid var(--choice);
+      background: white;
+    }
+    .choice b { color: var(--choice); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; }
+    .choice strong { display: block; margin-top: 8px; font: 650 20px Georgia, serif; }
+    .choice p { margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+    @media (max-width: 920px) {
+      .metric-map { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .auc-layout, .choice-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      .tab:not(#overview) h1 { font-size: 36px; }
+      .metric-map, .ne-meter, .lab-results { grid-template-columns: 1fr; }
+      .question-banner { grid-template-columns: 1fr; gap: 6px; }
+      .cutoff-control, .calibration-head { align-items: flex-start; flex-direction: column; }
+      .prob-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .metric-result { grid-template-columns: 1fr; }
+      .discount-bar { grid-template-columns: 57px 1fr 62px; }
+    }
+  </style>
+</head>
+<body data-guide-title="Ranking Metrics" style="--accent:#6a4c93;--accent-dark:#50366f;--accent-soft:#e9e2f1">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">M</span><span>Ranking Metrics</span></div>
+      <p>DCG, NDCG, AUC, and Normalized Entropy from first principles.</p>
+    </div>
+    <div class="nav-label">Guide</div>
+    <button class="tab-btn active" data-tab="build" data-panels="overview,scoreboard,dcg,ndcg"><span class="num">01</span>Build the idea</button>
+    <button class="tab-btn" data-tab="reason" data-panels="auc,ne,contrast,production,pitfalls"><span class="num">02</span>Reason with it</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">03</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">04</span>Papers &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20OneRec/">OneRec companion</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">Ranking Metrics / Build the idea</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/NDCG-Theory.pdf">NDCG PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Evaluation · ranking, discrimination, and calibration</div>
+      <h1>Four metrics. Four different questions.</h1>
+      <p class="lede">DCG and NDCG inspect the order of a recommendation list. AUC checks whether positives outrank negatives across thresholds. Normalized Entropy asks whether predicted probabilities deserve to be believed.</p>
+      <div class="meta-row"><span class="chip primary">complete calculations</span><span class="chip">graded relevance</span><span class="chip">pairwise ranking</span><span class="chip">cross-entropy</span><span class="chip">production caveats</span></div>
+      <div class="hero-rule"></div>
+
+      <div class="metric-map">
+        <div style="--metric:#a66b10"><b>DCG</b><strong>How much useful gain did this ordered list deliver?</strong><p>Add relevance after discounting lower ranks.</p><small>absolute · top-weighted · graded</small></div>
+        <div style="--metric:#6a4c93"><b>NDCG</b><strong>How close is this list to its own ideal ordering?</strong><p>Divide DCG by the best DCG possible for the same labels.</p><small>query-normalized · top-weighted</small></div>
+        <div style="--metric:#316790"><b>AUC</b><strong>How often does a random positive beat a random negative?</strong><p>Measure binary discrimination across every threshold.</p><small>pairwise · threshold-free · order-only</small></div>
+        <div style="--metric:#176b52"><b>NE</b><strong>How much better are probabilities than a constant-rate baseline?</strong><p>Divide log loss by the entropy of background CTR.</p><small>probabilistic · calibration-sensitive</small></div>
+      </div>
+
+      <div class="callout"><strong>The first rule of metric reading</strong><p>Before comparing two numbers, name the unit being evaluated: one query, one user, all impressions, one market, one day, or a weighted mixture. The same formula can answer a different question after aggregation.</p></div>
+
+      <h2>One system can need all four</h2>
+      <div class="pipeline">
+        <div class="stage"><strong>Candidate scores</strong><small>one score per item</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Ranked slate</strong><small>DCG / NDCG@k</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Positive separation</strong><small>ROC AUC</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Probability quality</strong><small>NE + calibration</small></div>
+      </div>
+      <p>A recommender can rank the right items in the right order while assigning poor probabilities. Conversely, a globally well-calibrated click model can still put the wrong item first for a particular user.</p>
+
+      <div class="paper"><div><strong>Cumulated Gain-Based Evaluation of IR Techniques</strong>Kalervo Järvelin &amp; Jaana Kekäläinen · ACM TOIS 2002</div><div class="paper-links"><a href="papers/Cumulated-Gain.pdf">Open report</a><a href="https://doi.org/10.1145/582415.582418">DOI</a></div></div>
+    </div></section>
+
+    <section class="tab" id="scoreboard"><div class="page">
+      <div class="eyebrow">Step 1 · Identify the evaluation object</div>
+      <h1>A metric is a question plus an aggregation rule.</h1>
+      <p class="lede">The formulas become much easier once you identify what is ordered, what is labeled, and which examples are allowed to interact.</p>
+
+      <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Input</th><th>Comparison neighborhood</th><th>Best</th><th>Main invariance</th></tr></thead><tbody>
+        <tr><td><strong>DCG@k</strong></td><td>One ranked list + graded labels</td><td>Ranks 1 through k</td><td>Higher; scale depends on labels</td><td>None across queries with different gain mass</td></tr>
+        <tr><td><strong>NDCG@k</strong></td><td>One ranked list + graded labels</td><td>Actual list versus ideal list</td><td>1</td><td>Normalizes available gain within a query</td></tr>
+        <tr><td><strong>ROC AUC</strong></td><td>Binary labels + scores</td><td>Every positive-negative pair</td><td>1</td><td>Strictly increasing score transforms</td></tr>
+        <tr><td><strong>NE</strong></td><td>Binary labels + probabilities</td><td>Model log loss versus constant CTR</td><td>0</td><td>Normalized for background-rate entropy</td></tr>
+      </tbody></table></div>
+
+      <h2>Metric directions are not uniform</h2>
+      <div class="grid2">
+        <div class="note"><h3>Higher is better</h3><p>DCG, NDCG, and AUC reward useful order. NDCG and AUC are usually bounded by 1; raw DCG is not query-comparable without care.</p></div>
+        <div class="note"><h3>Lower is better</h3><p>NE is a normalized loss. \(0\) is perfect prediction, \(1\) matches the constant-background-rate baseline, and values above \(1\) are worse than that baseline.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Question check</h3><p>A monotonic transformation preserves every item ordering but makes probabilities more extreme. Which metrics must stay unchanged?</p><button data-answer="metric-question-answer">Reveal answer</button><div class="answer" id="metric-question-answer">AUC stays unchanged because every positive-negative ordering is unchanged. DCG/NDCG also stay unchanged if the resulting item ranking stays unchanged. NE can change substantially because it evaluates the probability values themselves.</div></div>
+    </div></section>
+
+    <section class="tab" id="dcg"><div class="page">
+      <div class="eyebrow">Step 2 · Accumulate discounted gain</div>
+      <h1>DCG pays more for relevance near the top.</h1>
+      <p class="lede">A relevance label becomes gain. Rank becomes a discount. DCG is the sum of gain multiplied by position weight.</p>
+
+      <div class="question-banner"><b>DCG asks</b><p>“Given this exact ranked list, how much relevance did the user receive before patience ran out?”</p></div>
+
+      <h2>Choose the convention before calculating</h2>
+      <div class="formula-card" data-math-check>
+        \[
+          \operatorname{DCG}@k=\sum_{i=1}^{k}\frac{g(r_i)}{\log_2(i+1)},
+          \qquad
+          g(r)=2^r-1\ \text{in this guide}.
+        \]
+      </div>
+      <div class="grid2">
+        <div class="note"><h3>Linear gain</h3><p>\(g(r)=r\). A grade-3 item is worth three grade-1 items before discounting. Scikit-learn’s <code>dcg_score</code> directly discounts the supplied relevance values.</p></div>
+        <div class="note"><h3>Exponential gain</h3><p>\(g(r)=2^r-1\). Grades \(0,1,2,3\) become gains \(0,1,3,7\), making highly relevant items disproportionately valuable.</p></div>
+      </div>
+
+      <h2>What logarithmic discount does</h2>
+      <div class="discount-bars">
+        <div class="discount-bar"><b>rank 1</b><div class="track"><div class="fill" style="--weight:1"></div></div><code>1.0000</code></div>
+        <div class="discount-bar"><b>rank 2</b><div class="track"><div class="fill" style="--weight:.63093"></div></div><code>0.6309</code></div>
+        <div class="discount-bar"><b>rank 3</b><div class="track"><div class="fill" style="--weight:.5"></div></div><code>0.5000</code></div>
+        <div class="discount-bar"><b>rank 4</b><div class="track"><div class="fill" style="--weight:.43068"></div></div><code>0.4307</code></div>
+        <div class="discount-bar"><b>rank 5</b><div class="track"><div class="fill" style="--weight:.38685"></div></div><code>0.3869</code></div>
+      </div>
+      <p>The denominator is \(\log_2(i+1)\), so rank 1 receives full gain. The decay is gradual; the hard cutoff at \(k\) is what makes NDCG@k strongly top-focused.</p>
+
+      <h2>Complete DCG example</h2>
+      <p>A model ranks five items with graded relevance \([3,0,2,2,1]\). We use exponential gain.</p>
+      <div class="rank-stack">
+        <div class="rank-row head"><div>rank</div><div>item</div><div>relevance</div><div>gain</div><div>discount weight</div><div>contribution</div></div>
+        <div class="rank-row"><div class="rank">1</div><div>A</div><div><span class="grade">3</span></div><div>\(2^3-1=7\)</div><div>\(1/\log_2 2=1\)</div><div class="contribution">\(7.0000\)</div></div>
+        <div class="rank-row"><div class="rank">2</div><div>C</div><div><span class="grade">0</span></div><div>\(2^0-1=0\)</div><div>\(1/\log_2 3=0.6309\)</div><div class="contribution">\(0.0000\)</div></div>
+        <div class="rank-row"><div class="rank">3</div><div>B</div><div><span class="grade">2</span></div><div>\(2^2-1=3\)</div><div>\(1/\log_2 4=0.5\)</div><div class="contribution">\(1.5000\)</div></div>
+        <div class="rank-row"><div class="rank">4</div><div>E</div><div><span class="grade">2</span></div><div>\(2^2-1=3\)</div><div>\(1/\log_2 5=0.4307\)</div><div class="contribution">\(1.2920\)</div></div>
+        <div class="rank-row"><div class="rank">5</div><div>D</div><div><span class="grade">1</span></div><div>\(2^1-1=1\)</div><div>\(1/\log_2 6=0.3869\)</div><div class="contribution">\(0.3869\)</div></div>
+      </div>
+      <div class="formula-card" data-math-check>
+        \[
+        \operatorname{DCG}@5=7+0+1.5+1.2920+0.3869=\boxed{10.1789}.
+        \]
+      </div>
+      <div class="plain-note"><strong>Why raw DCG is awkward across users.</strong> A query with many grade-3 items has more possible gain than a query with only one grade-1 item. NDCG supplies a per-query denominator.</div>
+    </div></section>
+
+    <section class="tab" id="ndcg"><div class="page">
+      <div class="eyebrow">Step 3 · Normalize by the ideal list</div>
+      <h1>NDCG measures recovered opportunity.</h1>
+      <p class="lede">IDCG sorts the same relevance labels into their best possible order. Dividing by IDCG asks what fraction of available discounted gain the model recovered.</p>
+
+      <div class="formula-grid">
+        <div class="formula-card" data-math-check><b>Ideal ordering</b>\[\operatorname{IDCG}@k=\operatorname{DCG}@k\text{ after sorting labels from high to low}\]</div>
+        <div class="formula-card" data-math-check><b>Normalize</b>\[\operatorname{NDCG}@k=\frac{\operatorname{DCG}@k}{\operatorname{IDCG}@k}\]</div>
+      </div>
+
+      <h2>Same labels, best ordering</h2>
+      <p>The actual list has labels \([3,0,2,2,1]\). The ideal list is \([3,2,2,1,0]\), with gains \([7,3,3,1,0]\).</p>
+      <div class="formula-card" data-math-check>
+        \[
+        \operatorname{IDCG}@5
+        =7+\frac{3}{\log_2 3}+\frac{3}{\log_2 4}+\frac{1}{\log_2 5}
+        =10.8235.
+        \]
+        \[
+        \operatorname{NDCG}@5=\frac{10.1789}{10.8235}=\boxed{0.9404}.
+        \]
+      </div>
+
+      <h2>Move the cutoff and watch the verdict change</h2>
+      <div class="rank-stack" data-ndcg-lab>
+        <div class="cutoff-control"><strong>The model’s mistake is at rank 2.</strong><div class="cutoff-buttons"><button class="active" data-k="3">k = 3</button><button data-k="5">k = 5</button></div></div>
+        <div class="rank-row head"><div>rank</div><div>item</div><div>relevance</div><div>gain</div><div>discount weight</div><div>contribution</div></div>
+        <div class="rank-row" data-rank="1"><div class="rank">1</div><div>A</div><div><span class="grade">3</span></div><div>7</div><div>1.0000</div><div class="contribution">7.0000</div></div>
+        <div class="rank-row" data-rank="2"><div class="rank">2</div><div>C</div><div><span class="grade">0</span></div><div>0</div><div>0.6309</div><div class="contribution">0.0000</div></div>
+        <div class="rank-row" data-rank="3"><div class="rank">3</div><div>B</div><div><span class="grade">2</span></div><div>3</div><div>0.5000</div><div class="contribution">1.5000</div></div>
+        <div class="rank-row outside" data-rank="4"><div class="rank">4</div><div>E</div><div><span class="grade">2</span></div><div>3</div><div>0.4307</div><div class="contribution">1.2920</div></div>
+        <div class="rank-row outside" data-rank="5"><div class="rank">5</div><div>D</div><div><span class="grade">1</span></div><div>1</div><div>0.3869</div><div class="contribution">0.3869</div></div>
+        <div class="metric-result">
+          <div><small data-dcg-label>DCG@3</small><strong data-dcg>8.5000</strong></div>
+          <div><small data-idcg-label>IDCG@3</small><strong data-idcg>10.3928</strong></div>
+          <div><small data-ndcg-label>NDCG@3</small><strong data-ndcg>0.8179</strong></div>
+        </div>
+      </div>
+      <p>At \(k=3\), the irrelevant rank-2 item is expensive: NDCG is \(0.8179\). At \(k=5\), later relevant items recover much of the available gain, raising NDCG to \(0.9404\). Always report the cutoff.</p>
+
+      <div class="grid2">
+        <div class="note"><h3>No relevant item</h3><p>If \(\operatorname{IDCG}@k=0\), the ratio is undefined mathematically. Pipelines need an explicit convention: skip the query, return 0, or report it separately.</p></div>
+        <div class="note"><h3>Tied model scores</h3><p>A tie does not define one unique order. Libraries may average over possible tie orderings or accept an optimization that assumes ties do not occur.</p></div>
+      </div>
+      <div class="quiz"><h3>Cutoff check</h3><p>Can NDCG@10 and NDCG@100 disagree about which model is better?</p><button data-answer="ndcg-cutoff-answer">Reveal answer</button><div class="answer" id="ndcg-cutoff-answer">Yes. NDCG@10 only rewards the first ten positions; NDCG@100 also sees deeper ranking quality. The model with the better head need not have the better tail.</div></div>
+    </div></section>
+
+    <section class="tab" id="auc"><div class="page">
+      <div class="eyebrow">Step 4 · Evaluate binary discrimination</div>
+      <h1>AUC counts correctly ordered positive-negative pairs.</h1>
+      <p class="lede">The ROC curve sweeps a threshold. The equivalent pairwise view is usually easier to calculate by hand: choose one positive and one negative, then ask which received the higher score.</p>
+
+      <div class="formula-card" data-math-check>
+        \[
+        \operatorname{AUC}
+        =\Pr(s^+>s^-)+\frac{1}{2}\Pr(s^+=s^-).
+        \]
+      </div>
+      <p>With \(n_+\) positives and \(n_-\) negatives, there are \(n_+n_-\) cross-class pairs. A correct order earns 1, a tie usually earns \(0.5\), and a reversal earns 0.</p>
+
+      <h2>Complete six-pair example</h2>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th>Label</th><th>Score</th><th>Rank</th></tr></thead><tbody>
+        <tr><td>A</td><td>positive</td><td>0.90</td><td>1</td></tr>
+        <tr><td>B</td><td>negative</td><td>0.80</td><td>2</td></tr>
+        <tr><td>C</td><td>positive</td><td>0.70</td><td>3</td></tr>
+        <tr><td>D</td><td>positive</td><td>0.60</td><td>4</td></tr>
+        <tr><td>E</td><td>negative</td><td>0.40</td><td>5</td></tr>
+      </tbody></table></div>
+
+      <div class="auc-layout">
+        <div class="pair-board">
+          <div class="board-head"><strong>Every positive versus every negative</strong><span>3 × 2 = 6 pairs</span></div>
+          <div class="pair-grid">
+            <div class="axis">positive ↓<br>negative →</div><div class="axis">B · 0.80</div><div class="axis">E · 0.40</div>
+            <div class="axis">A · 0.90</div><div class="win">✓ win</div><div class="win">✓ win</div>
+            <div class="axis">C · 0.70</div><div class="loss">× loss</div><div class="win">✓ win</div>
+            <div class="axis">D · 0.60</div><div class="loss">× loss</div><div class="win">✓ win</div>
+          </div>
+          <div class="pair-summary">Correct orders = 4. Ties = 0. Therefore \(\operatorname{AUC}=4/6=\boxed{0.6667}\).</div>
+        </div>
+        <figure class="roc-board">
+          <div class="board-head"><strong>The same result as ROC area</strong><span>TPR versus FPR</span></div>
+          <svg viewBox="0 0 560 390" role="img" aria-label="ROC curve for the five-item example with area 0.6667">
+            <rect width="560" height="390" fill="#fff"/>
+            <line x1="75" y1="325" x2="505" y2="325" stroke="#52605a" stroke-width="2"/>
+            <line x1="75" y1="325" x2="75" y2="42" stroke="#52605a" stroke-width="2"/>
+            <line x1="75" y1="325" x2="505" y2="42" stroke="#c7ccc9" stroke-dasharray="7 7" stroke-width="2"/>
+            <path d="M75 325 L75 231 L290 231 L290 137 L290 42 L505 42 L505 325 Z" fill="#e9e2f1" opacity=".8"/>
+            <path d="M75 325 L75 231 L290 231 L290 137 L290 42 L505 42" fill="none" stroke="#6a4c93" stroke-width="5" stroke-linejoin="round"/>
+            <g fill="#6a4c93" stroke="#fff" stroke-width="3">
+              <circle cx="75" cy="325" r="7"/><circle cx="75" cy="231" r="7"/><circle cx="290" cy="231" r="7"/>
+              <circle cx="290" cy="137" r="7"/><circle cx="290" cy="42" r="7"/><circle cx="505" cy="42" r="7"/>
+            </g>
+            <g fill="#4e5953" font-family="Inter,system-ui,sans-serif" font-size="12">
+              <text x="63" y="346">0</text><text x="280" y="346">0.5</text><text x="498" y="346">1</text>
+              <text x="48" y="330">0</text><text x="40" y="235">⅓</text><text x="40" y="141">⅔</text><text x="48" y="47">1</text>
+              <text x="257" y="376" font-weight="700">False positive rate</text>
+              <text x="18" y="225" transform="rotate(-90 18 225)" font-weight="700">True positive rate</text>
+              <text x="340" y="190" fill="#50366f" font-size="18" font-weight="800">area = 0.6667</text>
+            </g>
+          </svg>
+          <figcaption>Descending the score list moves up for a positive and right for a negative. The shaded trapezoidal area equals the pair-count AUC.</figcaption>
+        </figure>
+      </div>
+
+      <div class="grid2">
+        <div class="note"><h3>Threshold-free is not decision-free</h3><p>AUC summarizes every threshold, but a deployed system still needs an operating point with business-specific false-positive and false-negative costs.</p></div>
+        <div class="note"><h3>AUC is not top-k</h3><p>A reversal near the bottom and a reversal near the top each affect a positive-negative pair. AUC does not directly encode user attention at rank 1.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="ne"><div class="page">
+      <div class="eyebrow">Step 5 · Evaluate probabilities against the base rate</div>
+      <h1>Normalized Entropy makes log loss relative.</h1>
+      <p class="lede">Here NE means Normalized Entropy—more precisely normalized cross-entropy or normalized log loss—as defined in Meta’s click-prediction work. Lower is better.</p>
+
+      <div class="formula-grid">
+        <div class="formula-card" data-math-check><b>Model log loss</b>\[
+          L=-\frac{1}{N}\sum_{i=1}^{N}\left[y_i\ln p_i+(1-y_i)\ln(1-p_i)\right]
+        \]</div>
+        <div class="formula-card" data-math-check><b>Background entropy</b>\[
+          H(p_0)=-\left[p_0\ln p_0+(1-p_0)\ln(1-p_0)\right]
+        \]</div>
+      </div>
+      <div class="formula-card" data-math-check>
+        \[
+        \operatorname{NE}=\frac{L}{H(p_0)}.
+        \]
+      </div>
+      <p>In the Facebook paper, \(p_0\) is the average empirical CTR of the training data. A model that predicts \(p_0\) for every impression has \(\operatorname{NE}=1\) when evaluated under the matching distribution.</p>
+
+      <h2>Complete five-impression example</h2>
+      <p>Let training background CTR be \(p_0=0.4\). On this transparent evaluation slice, labels are \([1,0,1,0,0]\) and predicted click probabilities are \([0.8,0.3,0.6,0.2,0.1]\).</p>
+      <div class="ne-calc">
+        <div class="ne-row head"><div>impression</div><div>label y</div><div>probability p</div><div>negative log-likelihood</div></div>
+        <div class="ne-row"><div>1</div><div>1</div><div>0.8</div><div>\(-\ln(0.8)=0.2231\)</div></div>
+        <div class="ne-row"><div>2</div><div>0</div><div>0.3</div><div>\(-\ln(1-0.3)=0.3567\)</div></div>
+        <div class="ne-row"><div>3</div><div>1</div><div>0.6</div><div>\(-\ln(0.6)=0.5108\)</div></div>
+        <div class="ne-row"><div>4</div><div>0</div><div>0.2</div><div>\(-\ln(1-0.2)=0.2231\)</div></div>
+        <div class="ne-row"><div>5</div><div>0</div><div>0.1</div><div>\(-\ln(1-0.1)=0.1054\)</div></div>
+        <div class="ne-row total"><div>mean</div><div></div><div></div><div>\(L=(1.4191)/5=0.2838\)</div></div>
+      </div>
+      <div class="ne-meter">
+        <div><small>model log loss L</small><strong>0.2838</strong></div>
+        <div><small>baseline entropy H(0.4)</small><strong>0.6730</strong></div>
+        <div><small>NE = L / H</small><strong>0.4217</strong></div>
+      </div>
+      <div class="formula-card" data-math-check>
+        \[
+        H(0.4)=-[0.4\ln(0.4)+0.6\ln(0.6)]=0.6730,
+        \qquad
+        \operatorname{NE}=\frac{0.2838}{0.6730}=\boxed{0.4217}.
+        \]
+      </div>
+
+      <div class="grid2">
+        <div class="note"><h3>Why normalize?</h3><p>Raw log loss is easier when the positive rate is extremely close to 0 or 1. Dividing by base-rate entropy expresses improvement relative to the difficulty of that background rate.</p></div>
+        <div class="note"><h3>Why clip probabilities?</h3><p>\(\ln(0)\) diverges. Production implementations clip \(p_i\) to \([\epsilon,1-\epsilon]\), and the chosen \(\epsilon\), weighting, and base-rate window belong in the metric contract.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="contrast"><div class="page">
+      <div class="eyebrow">Step 6 · Separate ordering from probability quality</div>
+      <h1>AUC can stay fixed while NE changes dramatically.</h1>
+      <p class="lede">AUC only sees relative order. NE sees every numerical probability. Scale logits without changing their order and the two metrics tell different stories.</p>
+
+      <div class="calibration-lab" data-calibration-lab>
+        <div class="calibration-head"><strong>Interactive logit-scale experiment</strong><span>Labels: 1, 0, 1, 1, 0, 0 · ranking never changes</span></div>
+        <div class="calibration-body">
+          <label for="logit-scale"><strong>Logit scale: <span data-scale-label>1.00</span>×</strong></label>
+          <input id="logit-scale" type="range" min="0.25" max="3" value="1" step="0.05" data-logit-scale>
+          <div class="scale-labels"><span>flatter probabilities</span><span>more extreme probabilities</span></div>
+          <div class="prob-strip" data-prob-strip></div>
+          <div class="lab-results">
+            <div><small>ROC AUC</small><strong data-live-auc>0.7778</strong></div>
+            <div><small>log loss</small><strong data-live-loss>—</strong></div>
+            <div><small>NE, baseline CTR 0.5</small><strong data-live-ne>—</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="note"><h3>Why AUC is frozen</h3><p>Multiplying every logit by a positive constant is strictly increasing. Every positive-negative pair keeps the same winner.</p></div>
+        <div class="note"><h3>Why NE moves</h3><p>Cross-entropy rewards confident correct probabilities and punishes confident mistakes. The negative example with a high score becomes increasingly expensive as scale grows.</p></div>
+      </div>
+
+      <h2>A useful mental decomposition</h2>
+      <div class="pipeline">
+        <div class="stage"><strong>Ranking</strong><small>Who goes before whom?</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Discrimination</strong><small>AUC / pair ordering</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Calibration</strong><small>Do 0.8 events occur ~80%?</small></div><div class="arrow">→</div>
+        <div class="stage"><strong>Probability loss</strong><small>log loss / NE</small></div>
+      </div>
+      <div class="plain-note"><strong>Do not call AUC a calibration metric.</strong> Scores can produce excellent AUC while being unusable as probabilities. Conversely, post-hoc calibration can improve NE without changing AUC if it preserves order.</div>
+    </div></section>
+
+    <section class="tab" id="production"><div class="page">
+      <div class="eyebrow">Step 7 · Match metrics to product behavior</div>
+      <h1>Choose metrics from the decision surface backward.</h1>
+      <p class="lede">The best offline metric is the one whose weighting resembles the product decision—then is validated against online outcomes.</p>
+
+      <div class="choice-grid">
+        <div class="choice" style="--choice:#a66b10"><b>Top slate quality</b><strong>Use NDCG@k</strong><p>When users consume an ordered page and graded relevance matters. Pick \(k\) from visible inventory or realistic attention depth.</p></div>
+        <div class="choice" style="--choice:#316790"><b>Binary separation</b><strong>Use AUC</strong><p>When you need threshold-independent discrimination over positives and negatives. Consider per-user or grouped AUC if global pairs hide personalization.</p></div>
+        <div class="choice" style="--choice:#176b52"><b>Probabilities drive value</b><strong>Use NE + calibration</strong><p>When bids, expected value, or downstream decisions depend on probability magnitude, not merely order.</p></div>
+        <div class="choice" style="--choice:#a24b3f"><b>Rare positives and head precision</b><strong>Add PR-AUC / Precision@k</strong><p>ROC AUC can look comfortable when negatives dominate. Add a metric that exposes positive precision in the operating region.</p></div>
+      </div>
+
+      <h2>Aggregation changes the objective</h2>
+      <div class="table-wrap"><table><thead><tr><th>Aggregation</th><th>What gets equal weight?</th><th>Potential surprise</th></tr></thead><tbody>
+        <tr><td>Macro NDCG</td><td>Each query or user</td><td>A user with 2 candidates can weigh as much as one with 2,000.</td></tr>
+        <tr><td>Impression-weighted NDCG</td><td>Traffic volume</td><td>Heavy users can dominate.</td></tr>
+        <tr><td>Global AUC</td><td>Every cross-class pair</td><td>Easy between-user score differences can hide poor within-user ranking.</td></tr>
+        <tr><td>Grouped AUC</td><td>Groups after excluding single-class groups</td><td>The exclusion and group weighting materially change the population.</td></tr>
+        <tr><td>Global NE</td><td>Each weighted impression</td><td>Large markets or frequent negatives can dominate calibration quality.</td></tr>
+      </tbody></table></div>
+
+      <h2>A production evaluation sequence</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · Freeze the metric contract</b><strong>Labels, attribution window, cutoff, gain, ties, weights.</strong><p>A metric name without these choices is incomplete.</p></div>
+        <div class="event"><b>2 · Slice before averaging</b><strong>User cohorts, markets, item age, sequence length.</strong><p>Aggregate gains can conceal regressions where the product is most fragile.</p></div>
+        <div class="event"><b>3 · Add uncertainty</b><strong>Bootstrap by the independent unit.</strong><p>Repeated impressions from one user are not independent rows.</p></div>
+        <div class="event"><b>4 · Validate online</b><strong>Offline metrics are proxies.</strong><p>Check latency, diversity, satisfaction, revenue, and long-term effects in controlled experiments.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="pitfalls"><div class="page">
+      <div class="eyebrow">Step 8 · Audit the metric before trusting it</div>
+      <h1>Most metric bugs live outside the formula.</h1>
+
+      <div class="grid2">
+        <div class="note"><h3>Inconsistent NDCG gain</h3><p>Linear and exponential gain can reverse conclusions. State \(g(r)\), log base, and cutoff in every dashboard definition.</p></div>
+        <div class="note"><h3>Unlabeled does not always mean irrelevant</h3><p>Implicit feedback is exposure-biased. An unclicked unseen item is not the same as a shown-and-skipped item.</p></div>
+        <div class="note"><h3>Global AUC leakage</h3><p>If one user has a higher base score than another, global cross-user pairs can be easy even when each user’s candidate order is poor.</p></div>
+        <div class="note"><h3>AUC under class imbalance</h3><p>AUC is mathematically pair-based, but the ROC view can underemphasize poor positive precision. Inspect PR curves and the deployed region.</p></div>
+        <div class="note"><h3>Moving NE denominator</h3><p>If background CTR is recomputed differently across experiments, NE changes for reasons unrelated to the model. Version the baseline window.</p></div>
+        <div class="note"><h3>Missing probability clipping</h3><p>One confidently wrong \(p=0\) or \(p=1\) yields infinite log loss. Define numerical clipping identically across systems.</p></div>
+        <div class="note"><h3>Selection and position bias</h3><p>Offline labels come from an older policy that chose what users saw. Better observed NDCG does not automatically imply better counterfactual ranking.</p></div>
+        <div class="note"><h3>Point estimate worship</h3><p>A change from 0.8112 to 0.8114 is not a conclusion without uncertainty, slice stability, and practical effect size.</p></div>
+      </div>
+
+      <div class="quiz"><h3>Metric diagnosis</h3><p>Model B has the same AUC as Model A, lower NE, and identical top-k ordering. What most likely improved?</p><button data-answer="metric-diagnosis-answer">Reveal answer</button><div class="answer" id="metric-diagnosis-answer">Its probability calibration or confidence quality improved while its ordering stayed fixed. A monotonic calibration map is one possible cause.</div></div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>DCG, NDCG, AUC, and NE on one sheet.</h1>
+
+      <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Core formula</th><th>Direction</th><th>Sees probability magnitude?</th><th>Biggest trap</th></tr></thead><tbody>
+        <tr><td>DCG@k</td><td>\(\sum_{i\le k}g(r_i)/\log_2(i+1)\)</td><td>Higher</td><td>No</td><td>Gain convention and cross-query scale</td></tr>
+        <tr><td>NDCG@k</td><td>\(\operatorname{DCG}@k/\operatorname{IDCG}@k\)</td><td>Higher; 1 ideal</td><td>No</td><td>Cutoff, zero-IDCG queries, ties</td></tr>
+        <tr><td>ROC AUC</td><td>\(\Pr(s^+>s^-)+\tfrac12\Pr(s^+=s^-)\)</td><td>Higher; 1 ideal</td><td>No</td><td>Calling global discrimination top-k quality</td></tr>
+        <tr><td>NE</td><td>\(\operatorname{logloss}/H(p_0)\)</td><td>Lower; 0 ideal</td><td>Yes</td><td>Changing baseline CTR or clipping</td></tr>
+      </tbody></table></div>
+
+      <h2>Worked numbers to remember</h2>
+      <div class="stat-strip">
+        <div class="stat"><strong>10.1789</strong><small>DCG@5 for [3,0,2,2,1]</small></div>
+        <div class="stat"><strong>0.9404</strong><small>NDCG@5 versus [3,2,2,1,0]</small></div>
+        <div class="stat"><strong>0.6667</strong><small>AUC from 4 correct / 6 pairs</small></div>
+        <div class="stat"><strong>0.4217</strong><small>NE = 0.2838 / 0.6730</small></div>
+      </div>
+
+      <h2>Six-question self-test</h2>
+      <div class="quiz"><p>1. Why is rank 1 undiscounted?<br>2. What does IDCG hold fixed?<br>3. Why can NDCG@3 and NDCG@5 differ sharply?<br>4. How does AUC treat score ties?<br>5. Why can calibration improve NE without changing AUC?<br>6. What does NE = 1 mean?</p><button data-answer="metrics-final-answer">Reveal compact answers</button><div class="answer" id="metrics-final-answer">1. \(\log_2(2)=1\). 2. The query’s relevance labels and cutoff. 3. The cutoff changes which ranks contribute and the ideal denominator. 4. Usually half credit. 5. A monotonic map changes probabilities but preserves order. 6. Model log loss equals the constant-background-rate baseline under the stated metric contract.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room · primary papers and implementation references</div>
+      <h1>Read the metric contract, not only the acronym.</h1>
+      <p class="lede">All diagrams, tables, and numerical examples in this guide are original teaching constructions. The papers and official documentation are linked for exact definitions, theory, and implementation behavior.</p>
+
+      <h2>Primary papers</h2>
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Cumulated Gain-Based Evaluation of IR Techniques</strong>Kalervo Järvelin &amp; Jaana Kekäläinen · ACM TOIS 2002</div><div class="paper-links"><a href="papers/Cumulated-Gain.pdf">Open report PDF</a><a href="https://doi.org/10.1145/582415.582418">Journal DOI</a></div></div>
+        <div class="paper"><div><strong>A Theoretical Analysis of NDCG Ranking Measures</strong>Yining Wang et al. · COLT 2013</div><div class="paper-links"><a href="papers/NDCG-Theory.pdf">Local PDF</a><a href="https://proceedings.mlr.press/v30/Wang13.html">PMLR</a></div></div>
+        <div class="paper"><div><strong>An Introduction to ROC Analysis</strong>Tom Fawcett · Pattern Recognition Letters 2006</div><div class="paper-links"><a href="https://doi.org/10.1016/j.patrec.2005.10.010">DOI</a></div></div>
+        <div class="paper"><div><strong>On the Consistency of AUC Pairwise Optimization</strong>Wei Gao &amp; Zhi-Hua Zhou · IJCAI 2015</div><div class="paper-links"><a href="papers/AUC-Pairwise-Optimization.pdf">Local PDF</a><a href="https://arxiv.org/abs/1208.0645">arXiv</a></div></div>
+        <div class="paper"><div><strong>Practical Lessons from Predicting Clicks on Ads at Facebook</strong>Xinran He et al. · ADKDD 2014</div><div class="paper-links"><a href="papers/Normalized-Entropy-Facebook-Ads.pdf">Local PDF</a><a href="https://ai.meta.com/research/publications/practical-lessons-from-predicting-clicks-on-ads-at-facebook/">Meta Research</a></div></div>
+      </div>
+
+      <h2>Official implementation references</h2>
+      <div class="grid2">
+        <div class="note"><h3>scikit-learn NDCG</h3><p>Documents score ordering, cutoff \(k\), sample weighting, and tie handling. Its supplied relevance values are the gains.</p><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.ndcg_score.html">Open documentation</a></div>
+        <div class="note"><h3>scikit-learn ROC AUC</h3><p>Documents binary, multiclass, multilabel, macro, weighted, one-vs-rest, and one-vs-one behavior.</p><a href="https://scikit-learn.org/stable/modules/generated/sklearn.metrics.roc_auc_score.html">Open documentation</a></div>
+        <div class="note"><h3>Google ROC/AUC explainer</h3><p>An official visual walkthrough of threshold sweeps, ROC space, and the positive-negative ranking interpretation.</p><a href="https://developers.google.com/machine-learning/crash-course/classification/roc-and-auc">Open explainer</a></div>
+        <div class="note"><h3>Meta NE source</h3><p>The production paper defines NE as average log loss divided by the entropy of training background CTR and discusses calibration separately.</p><a href="https://ai.meta.com/research/publications/practical-lessons-from-predicting-clicks-on-ads-at-facebook/">Open publication page</a></div>
+      </div>
+
+      <h2>Scope and convention notes</h2>
+      <div class="grid2">
+        <div class="note"><h3>Gain convention</h3><p>The main DCG/NDCG calculation uses \(2^r-1\). Some libraries and papers use raw relevance \(r\); numbers are not interchangeable.</p></div>
+        <div class="note"><h3>Log base</h3><p>DCG uses base-2 logarithms here. NE uses natural logarithms, but using another base in both numerator and denominator leaves the ratio unchanged.</p></div>
+        <div class="note"><h3>NE baseline</h3><p>The worked example uses \(p_0=0.4\) as a fixed training CTR. Production comparisons must version the baseline population and weighting.</p></div>
+        <div class="note"><h3>AUC ties</h3><p>The pair calculation awards half credit to equal scores. Framework behavior for ties, multiclass averaging, and sample weights should be verified explicitly.</p></div>
+      </div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mathjax-tex-svg.js"></script>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+<script>
+  (() => {
+    const lab = document.querySelector('[data-ndcg-lab]');
+    if (!lab) return;
+    const values = {
+      3: { dcg: '8.5000', idcg: '10.3928', ndcg: '0.8179' },
+      5: { dcg: '10.1789', idcg: '10.8235', ndcg: '0.9404' }
+    };
+    lab.querySelectorAll('[data-k]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const k = Number(button.dataset.k);
+        lab.querySelectorAll('[data-k]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+        lab.querySelectorAll('[data-rank]').forEach((row) => row.classList.toggle('outside', Number(row.dataset.rank) > k));
+        lab.querySelector('[data-dcg-label]').textContent = `DCG@${k}`;
+        lab.querySelector('[data-idcg-label]').textContent = `IDCG@${k}`;
+        lab.querySelector('[data-ndcg-label]').textContent = `NDCG@${k}`;
+        lab.querySelector('[data-dcg]').textContent = values[k].dcg;
+        lab.querySelector('[data-idcg]').textContent = values[k].idcg;
+        lab.querySelector('[data-ndcg]').textContent = values[k].ndcg;
+      });
+    });
+  })();
+
+  (() => {
+    const lab = document.querySelector('[data-calibration-lab]');
+    if (!lab) return;
+    const labels = [1, 0, 1, 1, 0, 0];
+    const logits = [2.2, 1.1, 0.6, -0.2, -0.8, -1.5];
+    const names = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const baselineEntropy = Math.log(2);
+    const slider = lab.querySelector('[data-logit-scale]');
+    const sigmoid = (value) => 1 / (1 + Math.exp(-value));
+    const render = () => {
+      const scale = Number(slider.value);
+      const probabilities = logits.map((logit) => sigmoid(logit * scale));
+      const loss = probabilities.reduce((sum, probability, index) => {
+        const clipped = Math.min(1 - 1e-12, Math.max(1e-12, probability));
+        return sum - labels[index] * Math.log(clipped) - (1 - labels[index]) * Math.log(1 - clipped);
+      }, 0) / labels.length;
+      lab.querySelector('[data-scale-label]').textContent = scale.toFixed(2);
+      lab.querySelector('[data-live-loss]').textContent = loss.toFixed(4);
+      lab.querySelector('[data-live-ne]').textContent = (loss / baselineEntropy).toFixed(4);
+      lab.querySelector('[data-prob-strip]').innerHTML = probabilities.map((probability, index) =>
+        `<div class="prob ${labels[index] ? 'positive' : 'negative'}"><b>${names[index]} · y=${labels[index]}</b><code>${probability.toFixed(3)}</code></div>`
+      ).join('');
+    };
+    slider.addEventListener('input', render);
+    render();
+  })();
+</script>
+</body>
+</html>
