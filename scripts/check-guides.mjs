@@ -11,6 +11,8 @@ const pages = [
   "ML - OneRec/index.html",
   "ML - Self Attention and Multi-Head Attention/index.html",
   "ML - Activation Functions and SwiGLU/index.html",
+  "ML - FlashAttention/index.html",
+  "ML - BatchNorm vs LayerNorm/index.html",
   "RL - PPO and GRPO/index.html"
 ];
 

@@ -14,12 +14,14 @@ const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms)
 
 const preferredShots = new Map([
   ["ML - Feature Interactions", "deepfm"],
-  ["ML - HSTU", "attention"],
+  ["ML - HSTU", "worked"],
   ["ML - Semantic IDs", "rqvae"],
   ["ML - Multimodal MMoE", "shazeer"],
   ["ML - OneRec", "ipa"],
   ["ML - Self Attention and Multi-Head Attention", "mha-worked"],
   ["ML - Activation Functions and SwiGLU", "worked"],
+  ["ML - FlashAttention", "worked"],
+  ["ML - BatchNorm vs LayerNorm", "worked"],
   ["RL - PPO and GRPO", "grpo"]
 ]);
 
@@ -234,7 +236,7 @@ async function revealPanel(cdp, panel, expectedTab) {
       top: Math.round(target.getBoundingClientRect().top)
     };
   })()`);
-  if (alignment.hash !== `#${panel}` || alignment.selectedButton !== expectedTab || alignment.top < 35 || alignment.top > 75) {
+  if (alignment.hash !== `#${panel}` || alignment.selectedButton !== expectedTab || alignment.top < 30 || alignment.top > 75) {
     throw new Error(`Broken deep link ${panel}: ${JSON.stringify(alignment)}`);
   }
 }

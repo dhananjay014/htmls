@@ -9,6 +9,119 @@
     window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
   </script>
   <link rel="stylesheet" href="../assets/guide.css">
+  <style>
+    .tab:not(#overview) h1 { max-width: 850px; font-size: clamp(38px, 4.2vw, 56px); line-height: 1.06; }
+    .story-levels {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0;
+    }
+    .story-level {
+      position: relative;
+      padding: 19px;
+      border: 1px solid #c7d3cc;
+      border-top: 4px solid var(--level);
+      background: white;
+    }
+    .story-level b { display: block; color: var(--level); font-size: 10px; letter-spacing: .09em; text-transform: uppercase; }
+    .story-level strong { display: block; margin-top: 7px; font: 650 22px Georgia, serif; }
+    .story-level p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .hstu-operator {
+      overflow: hidden;
+      margin: 28px 0;
+      border: 1px solid #b9c9c0;
+      background: white;
+      box-shadow: 0 10px 30px rgba(31, 55, 43, .07);
+    }
+    .hstu-operator-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 15px 18px;
+      border-bottom: 1px solid #d1dbd5;
+      background: #e7efe9;
+    }
+    .hstu-operator-head strong { font-size: 13px; }
+    .hstu-operator-head span { color: #53675c; font-size: 11px; }
+    .hstu-operator-scroll { overflow-x: auto; }
+    .hstu-operator-scroll > svg { display: block; width: 100%; min-width: 1080px; height: auto; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+    .hstu-operator .box { stroke-width: 2; filter: url(#hstu-shadow); }
+    .hstu-operator .input { fill: #e3edf4; stroke: #316790; }
+    .hstu-operator .projection { fill: #f7ecd9; stroke: #a66b10; }
+    .hstu-operator .attention { fill: #e2eee8; stroke: #176b52; }
+    .hstu-operator .norm { fill: #ece5f1; stroke: #74528c; }
+    .hstu-operator .gate { fill: #f6e6e3; stroke: #a24b3f; }
+    .hstu-operator .output { fill: #17211c; stroke: #17211c; }
+    .hstu-operator .wire { fill: none; stroke: #526f62; stroke-width: 3; marker-end: url(#hstu-arrow); }
+    .hstu-operator .wire.gate-wire { stroke: #a24b3f; marker-end: url(#hstu-arrow-red); }
+    .hstu-operator .kicker { fill: #587064; font-size: 11px; font-weight: 850; letter-spacing: .09em; }
+    .hstu-operator .title { fill: #17211c; font-family: Georgia, serif; font-size: 21px; font-weight: 650; }
+    .hstu-operator .copy { fill: #41534a; font-size: 12px; }
+    .hstu-operator .output-text { fill: white; }
+    .hstu-operator figcaption { padding: 12px 18px 15px; border-top: 1px solid #d1dbd5; color: #405148; font-size: 12px; }
+    .role-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin: 22px 0;
+      border: 1px solid #cbd6cf;
+      background: #cbd6cf;
+    }
+    .role-strip > div { padding: 15px; background: white; }
+    .role-strip b { display: block; color: var(--accent); font-size: 11px; }
+    .role-strip p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .candidate-mask-wrap { overflow-x: auto; margin: 22px 0; }
+    .candidate-mask {
+      display: grid;
+      grid-template-columns: 112px repeat(6, 72px);
+      width: max-content;
+      border-top: 1px solid #cbd5ce;
+      border-left: 1px solid #cbd5ce;
+    }
+    .candidate-mask > div {
+      display: grid;
+      min-height: 52px;
+      place-items: center;
+      padding: 6px;
+      border-right: 1px solid #cbd5ce;
+      border-bottom: 1px solid #cbd5ce;
+      background: white;
+      font-size: 11px;
+      text-align: center;
+    }
+    .candidate-mask .axis { background: #e9ede8; color: #4a5d52; font-size: 10px; font-weight: 800; }
+    .candidate-mask .yes { background: #e1eee7; color: #176b52; font-weight: 900; }
+    .candidate-mask .no { background: #f5e5e2; color: #a24b3f; font-weight: 900; }
+    .candidate-mask .self { background: #f7ecd9; color: #8b5a0c; font-weight: 900; }
+    .calc-list {
+      max-width: 100%;
+      overflow-x: auto;
+      margin: 16px 0 22px;
+      border: 1px solid #d1d9d4;
+      background: white;
+    }
+    .calc-line {
+      display: grid;
+      grid-template-columns: 122px max-content;
+      align-items: baseline;
+      min-width: max-content;
+      padding: 9px 13px;
+      border-bottom: 1px solid #e2e7e4;
+      font-size: 13px;
+    }
+    .calc-line:last-child { border-bottom: 0; }
+    .calc-line strong { color: var(--accent-dark); }
+    .calc-line mjx-container { margin: 0 !important; }
+    @media (max-width: 820px) {
+      .tab:not(#overview) h1 { font-size: 36px; }
+      .story-levels, .role-strip { grid-template-columns: 1fr; }
+      .hstu-operator { margin-right: -12px; margin-left: -12px; }
+      .hstu-operator-head { align-items: flex-start; flex-direction: column; gap: 3px; }
+      .hstu-operator-scroll > svg { min-width: 1180px; }
+    }
+  </style>
 </head>
 <body data-guide-title="HSTU" style="--accent:#176b52;--accent-dark:#104b3a;--accent-soft:#dcece5">
 <div class="shell">
@@ -39,6 +152,14 @@
       <p class="lede">HSTU is easier to understand once you separate two ideas: a recommender can be reformulated as a sequence model, and that sequence model needs a block designed for long, sparse, time-stamped behavior histories.</p>
       <div class="meta-row"><span class="chip primary">sequential transduction</span><span class="chip">pointwise attention</span><span class="chip">temporal bias</span><span class="chip">gated interaction</span><span class="chip">systems co-design</span></div>
       <div class="hero-rule"></div>
+
+      <h2>First separate the three levels of the paper</h2>
+      <div class="story-levels">
+        <div class="story-level" style="--level:#316790"><b>Level 1 · problem formulation</b><strong>Generative Recommender</strong><p>Turn recommendation into sequence-to-sequence prediction: next content for retrieval, or next response after inserting a candidate for ranking.</p></div>
+        <div class="story-level" style="--level:#176b52"><b>Level 2 · neural operator</b><strong>HSTU encoder</strong><p>A specialized residual block with fused U/V/Q/K projection, pointwise SiLU attention, temporal bias, LayerNorm, and an elementwise gate.</p></div>
+        <div class="story-level" style="--level:#a66b10"><b>Level 3 · systems algorithms</b><strong>Make scale usable</strong><p>Ragged kernels, Stochastic Length, activation fusion, embedding placement, and M-FALCON reduce training and serving cost.</p></div>
+      </div>
+      <div class="plain-note"><strong>Vocabulary discipline.</strong> GR is the task/data/training paradigm. HSTU is one encoder designed for it. M-FALCON is a candidate-serving algorithm that can also apply to other causal target-aware attention models.</div>
 
       <h2>The problem in one picture</h2>
       <figure class="diagram">
@@ -140,32 +261,83 @@ flowchart LR
       <h1>Inside one HSTU layer.</h1>
       <p class="lede">One fused projection creates queries, keys, values, and a gate. Pointwise attention pools the history; LayerNorm controls scale; the gate and output projection transform the result.</p>
 
-      <figure class="diagram">
-        <div class="diagram-head"><strong>Complete forward computation</strong><span>Residual is shown explicitly</span></div>
-        <div class="diagram-body"><pre class="mermaid">
-flowchart LR
-  X["X<br/>N x d"] --> F1["Linear + SiLU"]
-  F1 --> SPLIT["Split into<br/>U, V, Q, K"]
-  QK["Q K^T + relative<br/>position/time bias"] --> SILU["Pointwise SiLU"]
-  SPLIT --> QK
-  SPLIT --> AV["A V<br/>pool values"]
-  SILU --> AV
-  AV --> NORM["LayerNorm"]
-  SPLIT --> GATE["elementwise<br/>P * U"]
-  NORM --> GATE
-  GATE --> F2["Output linear"]
-  F2 --> ADD["Residual add"]
-  X --> ADD
-  ADD --> Y["X next<br/>N x d"]
-  class X input; class F1,F2 param; class SPLIT,QK,SILU,AV,GATE op; class NORM route; class ADD route; class Y output;
-  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
-  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
-  classDef op fill:#dcece5,stroke:#176b52,stroke-width:2px;
-  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
-  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
-        </pre></div>
-        <figcaption>The paper’s Equation (3) defines the transformed output (Y(X)); HSTU layers are stacked with residual connections, so an implementation adds that transformed output back to the layer input.</figcaption>
+      <figure class="hstu-operator" aria-labelledby="hstu-operator-title">
+        <div class="hstu-operator-head"><strong id="hstu-operator-title">One HSTU residual layer, with every branch visible</strong><span>Q/K choose interactions · V carries content · U gates channels</span></div>
+        <div class="hstu-operator-scroll" tabindex="0" aria-label="Scrollable HSTU operator diagram">
+          <svg viewBox="0 0 1400 430" role="img" aria-labelledby="hstu-svg-title hstu-svg-desc">
+            <title id="hstu-svg-title">Complete HSTU residual layer</title>
+            <desc id="hstu-svg-desc">Input X is projected with a linear layer and SiLU into U, V, Q, and K. Q and K form pointwise attention with relative bias, V is pooled, the result is layer normalized and multiplied by U, then projected and added to X.</desc>
+            <defs>
+              <filter id="hstu-shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#1e3228" flood-opacity=".12"/></filter>
+              <marker id="hstu-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#526f62"/></marker>
+              <marker id="hstu-arrow-red" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#a24b3f"/></marker>
+            </defs>
+            <path class="wire" d="M150 198H205"/>
+            <path class="wire" d="M425 155H475"/>
+            <path class="wire" d="M665 155H710"/>
+            <path class="wire" d="M860 198H905"/>
+            <path class="wire" d="M1035 198H1080"/>
+            <path class="wire" d="M1220 198H1260"/>
+            <path class="wire" d="M425 235C535 235 590 270 710 270"/>
+            <path class="wire gate-wire" d="M405 290C640 382 940 365 1080 265"/>
+            <path class="wire" d="M95 260C185 405 1160 405 1310 283"/>
+            <text class="copy" x="438" y="140">Q, K</text>
+            <text class="copy" x="590" y="274">V</text>
+            <text class="copy" x="760" y="369">U gate</text>
+            <text class="copy" x="560" y="398">identity residual</text>
+
+            <rect class="box input" x="30" y="135" width="120" height="125" rx="14"/>
+            <text class="kicker" x="50" y="165">INPUT</text>
+            <text class="title" x="50" y="203">X</text>
+            <text class="copy" x="50" y="232">[N × d]</text>
+
+            <rect class="box projection" x="205" y="70" width="220" height="245" rx="14"/>
+            <text class="kicker" x="228" y="102">1 · POINTWISE PROJECT</text>
+            <text class="title" x="228" y="139">SiLU(XW₁+b₁)</text>
+            <text class="copy" x="228" y="176">split into four roles</text>
+            <text class="copy" x="242" y="212">Q · query</text>
+            <text class="copy" x="242" y="238">K · key</text>
+            <text class="copy" x="242" y="264">V · value</text>
+            <text class="copy" x="242" y="290">U · channel gate</text>
+
+            <rect class="box attention" x="475" y="85" width="190" height="140" rx="14"/>
+            <text class="kicker" x="497" y="116">2 · PAIRWISE SCORE</text>
+            <text class="title" x="497" y="154">QKᵀ + Rₚ,ₜ</text>
+            <text class="copy" x="497" y="184">position + time bias</text>
+            <text class="copy" x="497" y="207">causal pair matrix</text>
+
+            <rect class="box attention" x="710" y="125" width="150" height="145" rx="14"/>
+            <text class="kicker" x="731" y="155">3 · POOL</text>
+            <text class="title" x="731" y="193">A V</text>
+            <text class="copy" x="731" y="222">A = SiLU(score)</text>
+            <text class="copy" x="731" y="246">no row softmax</text>
+
+            <rect class="box norm" x="905" y="135" width="130" height="125" rx="14"/>
+            <text class="kicker" x="925" y="166">4 · STABILIZE</text>
+            <text class="title" x="925" y="204">LayerNorm</text>
+            <text class="copy" x="925" y="233">over channels</text>
+
+            <rect class="box gate" x="1080" y="135" width="140" height="125" rx="14"/>
+            <text class="kicker" x="1100" y="166">5 · GATE</text>
+            <text class="title" x="1100" y="204">LN(AV) ⊙ U</text>
+            <text class="copy" x="1100" y="233">channelwise</text>
+
+            <rect class="box output" x="1260" y="120" width="120" height="155" rx="14"/>
+            <text class="kicker output-text" x="1279" y="151">6 · RETURN</text>
+            <text class="title output-text" x="1279" y="187">f₂ + X</text>
+            <text class="copy output-text" x="1279" y="218">output linear</text>
+            <text class="copy output-text" x="1279" y="242">plus residual</text>
+          </svg>
+        </div>
+        <figcaption>The paper’s Equation (3) defines the transformed branch \(Y(X)\). The implementation stacks HSTU layers with residual connections, so the next representation is \(X'=X+Y(X)\).</figcaption>
       </figure>
+
+      <div class="role-strip">
+        <div><b>Q · “What am I looking for?”</b><p>One query vector per current token and head.</p></div>
+        <div><b>K · “What do I match?”</b><p>Historical coordinates compared with Q.</p></div>
+        <div><b>V · “What content do I send?”</b><p>Historical channels aggregated by pointwise weights.</p></div>
+        <div><b>U · “Which channels pass now?”</b><p>Current-token gate multiplied after pooled-history normalization.</p></div>
+      </div>
 
       <h2>The three equations</h2>
       <div class="derivation">
@@ -202,6 +374,13 @@ flowchart LR
         <div class="formula-card"><b>Transformer-style row normalization</b>\[a_{ij}^{\text{soft}}=\frac{e^{s_{ij}}}{\sum_k e^{s_{ik}}},\quad \sum_j a_{ij}^{\text{soft}}=1\]<p>Relative allocation is explicit; total mass is fixed.</p></div>
         <div class="formula-card"><b>HSTU pointwise activation</b>\[a_{ij}^{\text{HSTU}}=\operatorname{SiLU}(s_{ij}),\quad s_{ij}=q_i^\top k_j+r_{ij}\]<p>Each edge is transformed independently; total mass can vary.</p></div>
       </div>
+
+      <h2>One event versus two matching events</h2>
+      <div class="table-wrap"><table><thead><tr><th>History</th><th>Softmax weights</th><th>Pointwise SiLU weights</th><th>Pre-normalization total mass</th></tr></thead><tbody>
+        <tr><td>one score \([2]\)</td><td>\([1]\)</td><td>\([1.7616]\)</td><td>softmax 1 · pointwise 1.7616</td></tr>
+        <tr><td>two scores \([2,2]\)</td><td>\([0.5,0.5]\)</td><td>\([1.7616,1.7616]\)</td><td>softmax 1 · pointwise 3.5232</td></tr>
+      </tbody></table></div>
+      <div class="plain-note"><strong>Important nuance.</strong> This table proves that pointwise aggregation retains variable mass before LayerNorm; it does not prove that duplicating an identical value must change the final HSTU output. LayerNorm removes a uniform scale change. Real histories alter channel directions, time/position biases, values, and the later U gate—not only one scalar magnitude.</div>
 
       <div class="interactive" data-attention-demo>
         <div class="interactive-head"><strong>Compare the same four logits</strong><span>Illustrative scalar weights; the real model is multi-head and vector-valued.</span></div>
@@ -253,68 +432,122 @@ flowchart LR
       <div class="callout"><strong>These are model-accounting figures, not universal profiler outputs.</strong><p>Actual peak memory depends on recomputation, kernel implementation, tensor parallelism, allocator behavior, precision, and the exact Transformer baseline.</p></div>
 
       <h2>Serving many candidate targets</h2>
-      <figure class="diagram">
-        <div class="diagram-head"><strong>M-FALCON cost amortization</strong><span>Shared history, microbatched targets</span></div>
-        <div class="diagram-body"><pre class="mermaid">
-flowchart LR
-  H["Encode user history once"] --> CACHE["Reusable HSTU states"]
-  C1["candidate microbatch 1"] --> TA1["target-aware attention"]
-  C2["candidate microbatch 2"] --> TA2["target-aware attention"]
-  C3["candidate microbatch ..."] --> TA3["target-aware attention"]
-  CACHE --> TA1
-  CACHE --> TA2
-  CACHE --> TA3
-  TA1 --> S["candidate scores"]
-  TA2 --> S
-  TA3 --> S
-  class H,C1,C2,C3 input; class CACHE param; class TA1,TA2,TA3 op; class S output;
-  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
-  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
-  classDef op fill:#dcece5,stroke:#176b52,stroke-width:2px;
-  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
-        </pre></div>
-        <figcaption>The paper reports serving a model described as 285× more complex than its DLRM source while attaining higher QPS in tested configurations. This is a system-specific result, not a claim that arbitrary 285× models are cheaper.</figcaption>
-      </figure>
+      <p>M-FALCON appends a microbatch of \(b_m\) candidates to one history. A modified mask lets every candidate read the history and itself, while forbidding candidate \(c_i\) from reading any other candidate \(c_j\). The final \(b_m\) states are therefore identical to \(b_m\) separate target-aware passes, but history work is shared.</p>
+
+      <div class="candidate-mask-wrap">
+        <div class="candidate-mask" aria-label="M-FALCON candidate attention mask">
+          <div class="axis">query \ key</div><div class="axis">history 1</div><div class="axis">history 2</div><div class="axis">history 3</div><div class="axis">candidate 0</div><div class="axis">candidate 1</div><div class="axis">candidate 2</div>
+          <div class="axis">candidate 0</div><div class="yes">✓</div><div class="yes">✓</div><div class="yes">✓</div><div class="self">self</div><div class="no">×</div><div class="no">×</div>
+          <div class="axis">candidate 1</div><div class="yes">✓</div><div class="yes">✓</div><div class="yes">✓</div><div class="no">×</div><div class="self">self</div><div class="no">×</div>
+          <div class="axis">candidate 2</div><div class="yes">✓</div><div class="yes">✓</div><div class="yes">✓</div><div class="no">×</div><div class="no">×</div><div class="self">self</div>
+        </div>
+      </div>
+      <div class="diagram-caption">Green cells read shared history. Red off-diagonal cells prevent candidates from leaking information into one another. Gold is each candidate’s own token.</div>
+
+      <div class="grid3">
+        <div class="concept"><h3>1 · Batch candidates</h3><p>One first pass over \(n+b_m\) tokens replaces \(b_m\) passes over \(n+1\) tokens.</p></div>
+        <div class="concept"><h3>2 · Cache history K/V</h3><p>Across later microbatches, reuse every layer’s history keys and values instead of re-encoding them.</p></div>
+        <div class="concept"><h3>3 · Compute candidate rows</h3><p>Only candidate U/Q/K/V and candidate-to-history interactions are new for each cached pass.</p></div>
+      </div>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Separate target-aware passes</b>\[O(mn^2d)\]<p>Repeat the whole length-\(n\) encoder for every candidate.</p></div>
+        <div class="formula-card"><b>One microbatch</b>\[O((n+b_m)^2d)\approx O(n^2d)\quad\text{when }b_m=O(n)\]<p>Share history work across \(b_m\) candidates.</p></div>
+        <div class="formula-card"><b>Later cached microbatch</b>\[O(b_md^2+b_mnd)\]<p>Paper’s complexity after reusing per-layer history K/V.</p></div>
+      </div>
+      <div class="callout"><strong>Read “encode once” carefully.</strong><p>The first microbatch builds cacheable per-layer history K/V states. Later microbatches still run candidate projections, candidate-to-history attention, gates, and output transforms; they do not get candidate scores for free.</p></div>
+      <div class="plain-note"><strong>Evidence scope.</strong> The paper reports serving a model described as 285× more complex than its DLRM source while achieving 1.50×/2.99× higher QPS at 1,024/16,384 candidates in tested configurations. This is a system-specific result, not a universal multiplier.</div>
 
       <h2>Embedding scale is its own bottleneck</h2>
       <p>With a 10-billion-entry vocabulary and 512-dimensional embeddings, the paper estimates roughly 60 TB for fp32 embeddings plus Adam states. It uses row-wise AdamW and places optimizer state in DRAM to reduce HBM pressure. HSTU does not make the embedding table disappear; the system shards and manages it.</p>
     </div></section>
 
     <section class="tab" id="worked"><div class="page">
-      <div class="eyebrow">Concrete pass · Four historical events</div>
-      <h1>Follow one candidate through the block.</h1>
-      <p class="lede">This scalar-head example strips away dimensions so every operation is visible. It illustrates the operator; it is not a reproduction of a trained HSTU.</p>
+      <div class="eyebrow">Complete vector example · one candidate, two historical events</div>
+      <h1>Follow one candidate through a complete HSTU block.</h1>
+      <p class="lede">The earlier scalar example could not actually calculate LayerNorm. This two-channel construction exposes every post-projection operation. The vectors are original teaching values, not trained paper parameters.</p>
 
-      <h2>Setup</h2>
-      <div class="table-wrap"><table><thead><tr><th>History token</th><th>Action</th><th>Score \(s_j=q^\top k_j+r_j\)</th><th>Value \(v_j\)</th></tr></thead><tbody>
-        <tr><td>sports clip A</td><td>skip</td><td>0.5</td><td>0.2</td></tr>
-        <tr><td>sports clip B</td><td>click</td><td>1.2</td><td>0.5</td></tr>
-        <tr><td>sports clip C</td><td>long view</td><td>2.0</td><td>1.0</td></tr>
-        <tr><td>sports clip D</td><td>share</td><td>0.8</td><td>0.7</td></tr>
+      <h2>0 · Fused projection outputs</h2>
+      <p>For the current candidate token, let the residual state be \(x=[2,1]\). After the paper’s linear + SiLU projection and split, one head produces:</p>
+      <div class="math">
+        \[
+        q=[1,1],\qquad U=[0.5,2].
+        \]
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Historical event</th><th>Key \(k_j\)</th><th>Value \(v_j\)</th><th>Relative bias \(r_j\)</th></tr></thead><tbody>
+        <tr><td>A · recent click</td><td>\([1,0]\)</td><td>\([1,2]\)</td><td>0</td></tr>
+        <tr><td>B · long view</td><td>\([1,1]\)</td><td>\([3,-1]\)</td><td>0</td></tr>
       </tbody></table></div>
 
-      <div class="derivation">
-        <h3>One query, one scalar channel</h3>
-        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[a_j=\operatorname{SiLU}(s_j)\approx[0.311,0.922,1.762,0.552]\]</div><div class="step-explain"><strong>Activate each edge independently.</strong>The long-view event receives the strongest positive interaction, but the other events keep their own absolute mass.</div></div>
-        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[p=\sum_j a_jv_j\approx 0.311(0.2)+0.922(0.5)+1.762(1)+0.552(0.7)=2.67\]</div><div class="step-explain"><strong>Pool values.</strong>The result is a signed weighted sum, not a convex average. In the real layer this occurs per head and channel.</div></div>
-        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[z=\operatorname{LN}(p)\odot u,\qquad y=W_2z+b_2,\qquad x'=x+y\]</div><div class="step-explain"><strong>Normalize, gate, project, add.</strong>A scalar cannot meaningfully demonstrate LayerNorm, so this last step must be understood vector-wise: channels are standardized, selectively gated by \(U\), and returned to width \(d\).</div></div>
+      <h2>1 · Query–key scores</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(s_1\)</strong>\(q^\top k_1+r_1=1(1)+1(0)+0=1\)</div>
+        <div class="calc-line"><strong>\(s_2\)</strong>\(q^\top k_2+r_2=1(1)+1(1)+0=2\)</div>
+      </div>
+      <div class="math">\[s=[1,2]\]</div>
+
+      <h2>2 · Pointwise SiLU weights</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(a_1\)</strong>\(\operatorname{SiLU}(1)=1/(1+e^{-1})=0.7311\)</div>
+        <div class="calc-line"><strong>\(a_2\)</strong>\(\operatorname{SiLU}(2)=2/(1+e^{-2})=1.7616\)</div>
+      </div>
+      <div class="plain-note"><strong>Not probabilities.</strong> The weights sum to \(2.4927\), can exceed one individually, and can be negative for negative scores.</div>
+
+      <h2>3 · Pool the value vectors</h2>
+      <div class="math">
+        \[
+        \begin{aligned}
+        P=AV
+        &=0.7311[1,2]+1.7616[3,-1]\\
+        &=[0.7311,1.4622]+[5.2848,-1.7616]\\
+        &=[6.0159,-0.2994].
+        \end{aligned}
+        \]
       </div>
 
+      <h2>4 · LayerNorm across the two channels</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>mean</strong>\(\mu=(6.0159-0.2994)/2=2.85825\)</div>
+        <div class="calc-line"><strong>deviations</strong>\(P-\mu=[3.15765,-3.15765]\)</div>
+        <div class="calc-line"><strong>variance</strong>\(\sigma^2=(3.15765^2+(-3.15765)^2)/2=9.9708\)</div>
+        <div class="calc-line"><strong>normalized</strong>\(\operatorname{LN}(P)=[1,-1]\quad(\epsilon=0,\ \gamma=1,\ \beta=0)\)</div>
+      </div>
+
+      <h2>5 · Gate with U</h2>
+      <div class="math">
+        \[
+        z=\operatorname{LN}(P)\odot U=[1,-1]\odot[0.5,2]=[0.5,-2].
+        \]
+      </div>
+      <p>The current candidate allows half of the first normalized channel through and doubles the magnitude of the second channel. This is the target-conditioned feature interaction that replaces a separate wide FFN.</p>
+
+      <h2>6 · Output projection and residual</h2>
+      <div class="math">
+        \[
+        W_2=\begin{bmatrix}1&amp;0.5\\-0.5&amp;1\end{bmatrix},\qquad
+        Y=zW_2=[1.5,-1.75]
+        \]
+        \[
+        x'=x+Y=[2,1]+[1.5,-1.75]=[3.5,-0.75].
+        \]
+      </div>
+      <div class="callout"><strong>The whole block in words</strong><p>The candidate query prefers event B; pointwise SiLU pools both event values with unconstrained mass; LayerNorm stabilizes the two-channel pool; U decides which normalized channels pass; \(W_2\) mixes them back to model width; the residual preserves a direct route from \(x\).</p></div>
+
       <h2>Where time enters</h2>
-      <p>If clip C happened 90 days ago while clip B happened 10 seconds ago, the learned temporal bucket bias can lower C’s effective score even if their content dot product is similar:</p>
+      <p>If event B is very old, its learned time bucket could contribute \(r_2=-1\), changing its score from 2 to 1 before SiLU. Position and elapsed time alter the interaction weight, not the value vector directly:</p>
       <div class="math"><span class="label">Relative position + time</span>\[s_{ij}=q_i^\top k_j+r_{\text{position}(i-j),\,\text{time}(t_i-t_j)}\]</div>
 
       <h2>Shape trace for a realistic miniature</h2>
       <div class="table-wrap"><table><thead><tr><th>Tensor</th><th>Example shape</th><th>Meaning</th></tr></thead><tbody>
-        <tr><td>(X)</td><td><code>[batch=32, N=256, d=128]</code></td><td>Token embeddings for 32 user histories.</td></tr>
-        <tr><td>(Q,K)</td><td><code>[32, h=4, 256, d_qk=32]</code></td><td>Pairwise matching coordinates.</td></tr>
-        <tr><td>(U,V)</td><td><code>[32, 4, 256, d_v=32]</code></td><td>Gate and value channels.</td></tr>
-        <tr><td>(A)</td><td><code>[32, 4, 256, 256]</code></td><td>Causal score matrix; a ragged kernel avoids padded work.</td></tr>
-        <tr><td>(AV)</td><td><code>[32, 4, 256, 32]</code></td><td>History pooled per query and head.</td></tr>
-        <tr><td>(X')</td><td><code>[32, 256, 128]</code></td><td>Residual output ready for the next HSTU layer.</td></tr>
+        <tr><td>\(X\)</td><td><code>[batch=32, N=256, d=128]</code></td><td>Token embeddings for 32 user histories.</td></tr>
+        <tr><td>\(Q,K\)</td><td><code>[32, h=4, 256, d_qk=32]</code></td><td>Pairwise matching coordinates.</td></tr>
+        <tr><td>\(U,V\)</td><td><code>[32, 4, 256, d_v=32]</code></td><td>Gate and value channels.</td></tr>
+        <tr><td>\(A\)</td><td><code>[32, 4, 256, 256]</code></td><td>Causal pointwise interaction matrix; ragged kernels avoid padded work.</td></tr>
+        <tr><td>\(AV\)</td><td><code>[32, 4, 256, 32]</code></td><td>History pooled per query and head.</td></tr>
+        <tr><td>\(X'\)</td><td><code>[32, 256, 128]</code></td><td>Residual output ready for the next HSTU layer.</td></tr>
       </tbody></table></div>
 
-      <div class="quiz"><h3>Implementation trap</h3><p>Can you replace pointwise SiLU with softmax and still call the operator unchanged HSTU?</p><button data-answer="hstu-q-worked">Reveal answer</button><div class="answer" id="hstu-q-worked">No. It remains an attention model and may be a useful ablation, but it removes HSTU’s pointwise aggregated attention—the mechanism intended to retain preference intensity. The paper reports this replacement as an ablated HSTU.</div></div>
+      <div class="quiz"><h3>Implementation trap</h3><p>Can you replace pointwise SiLU with softmax and still call the operator unchanged HSTU?</p><button data-answer="hstu-q-worked">Reveal answer</button><div class="answer" id="hstu-q-worked">No. It remains an attention model and may be a useful ablation, but it removes HSTU’s pointwise aggregated attention. The paper reports this replacement as an ablated HSTU.</div></div>
     </div></section>
 
     <section class="tab" id="evidence"><div class="page">
@@ -397,13 +630,15 @@ flowchart LR
         <div class="event"><b>4 · Section 4</b><strong>Evidence</strong><p>Keep public benchmarks, encoder microbenchmarks, internal offline results, and online A/B tests in separate evidence buckets.</p></div>
       </div>
 
-      <h2>Useful implementation reference</h2>
+      <h2>Implementation and explanatory trail</h2>
       <div class="grid2">
-        <div class="note"><h3>Meta Generative Recommenders</h3><p>The authors’ open-source repository includes HSTU components and generative-recommendation examples. Match code paths to the paper before assuming exact production parity.</p><a href="https://github.com/facebookresearch/generative-recommenders">Open repository</a></div>
+        <div class="note"><h3>Meta Generative Recommenders</h3><p>The authors’ open-source repository includes HSTU components, public-data configurations, ragged kernels, and generative-recommendation examples. Match code paths to the paper before assuming production parity.</p><a href="https://github.com/meta-recsys/generative-recommenders">Open repository</a></div>
+        <div class="note"><h3>Generalized dot-product attention</h3><p>A PyTorch engineering article explains kernels where softmax is replaced by pointwise activations, including HSTU’s use of SiLU.</p><a href="https://pytorch.org/blog/generalized-dot-product-attention-tackling-real-world-challenges-in-gpu-training-kernels/">Open engineering article</a></div>
+        <div class="note"><h3>Independent paper walkthrough</h3><p>Calvin Woo’s technical notes give another section-by-section derivation of the GR formulation and HSTU operator.</p><a href="https://calwoo.github.io/notes/papers/generative-recommenders/hstu/">Open walkthrough</a></div>
         <div class="note"><h3>Feature Interactions companion</h3><p>Use the original field guide to contrast HSTU’s target-history interaction with FM, DCN, AutoInt, DHEN, and Wukong operators.</p><a href="../ML%20-%20Feature%20Interactions/#autoint">Open companion</a></div>
       </div>
 
-      <div class="callout"><strong>Accuracy note</strong><p>Equations and numerical claims here were checked against the downloaded v3 paper. Worked scalar values are original teaching examples and are labeled as illustrative.</p></div>
+      <div class="callout"><strong>Accuracy and visual-source note</strong><p>Equations and numerical claims were checked against the downloaded v3 paper and the authors’ repository. The vector calculation, HSTU operator graphic, and M-FALCON mask are original teaching constructions; no blog or paper figures were copied.</p></div>
     </div></section>
   </main>
 </div>

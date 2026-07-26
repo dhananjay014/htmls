@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and numerical comparison of Batch Normalization and Layer Normalization, including axes, training versus inference, CNN and Transformer shapes, and complete calculations.">
+  <title>BatchNorm vs LayerNorm · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
+  </script>
+  <link rel="stylesheet" href="../assets/guide.css">
+  <style>
+    .tab:not(#overview) h1 { max-width: 850px; font-size: clamp(38px, 4.2vw, 56px); line-height: 1.06; }
+    .axis-explorer {
+      margin: 28px 0;
+      border: 1px solid #c5bfd0;
+      background: white;
+      box-shadow: 0 10px 30px rgba(54, 43, 76, .07);
+    }
+    .axis-explorer-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 15px 18px;
+      border-bottom: 1px solid #d9d4df;
+      background: #eeeaf2;
+    }
+    .axis-explorer-head strong { font-size: 13px; }
+    .axis-explorer-head span { color: #665f70; font-size: 11px; }
+    .axis-buttons { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 18px; border-bottom: 1px solid #e0dce5; }
+    .axis-buttons button {
+      padding: 7px 11px;
+      border: 1px solid #bcb3c8;
+      background: white;
+      color: #51425f;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .axis-buttons button.active { border-color: var(--accent); background: var(--accent); color: white; }
+    .norm-grid-scroll { overflow-x: auto; padding: 20px 18px 16px; }
+    .norm-grid {
+      display: grid;
+      grid-template-columns: 120px repeat(4, minmax(110px, 1fr));
+      width: 100%;
+      min-width: 620px;
+      border-top: 1px solid #ccc6d3;
+      border-left: 1px solid #ccc6d3;
+      transition: background .2s ease;
+    }
+    .norm-grid > div {
+      display: grid;
+      min-height: 58px;
+      place-items: center;
+      padding: 7px;
+      border-right: 1px solid #ccc6d3;
+      border-bottom: 1px solid #ccc6d3;
+      background: white;
+      font-size: 12px;
+      transition: background .2s ease, box-shadow .2s ease;
+    }
+    .norm-grid .axis { background: #f0edf3; color: #5d5368; font-size: 10px; font-weight: 800; }
+    .norm-grid.bn .value[data-col="0"] { background: #dfeaf2; box-shadow: inset 0 0 0 2px #316790; }
+    .norm-grid.bn .value[data-col="1"] { background: #f7ead8; box-shadow: inset 0 0 0 2px #a66b10; }
+    .norm-grid.bn .value[data-col="2"] { background: #e2eee8; box-shadow: inset 0 0 0 2px #176b52; }
+    .norm-grid.bn .value[data-col="3"] { background: #f5e4e1; box-shadow: inset 0 0 0 2px #a24b3f; }
+    .norm-grid.ln .value[data-row="0"] { background: #e7e0ed; box-shadow: inset 0 0 0 2px #74528c; }
+    .norm-grid.ln .value[data-row="1"] { background: #dfeaf2; box-shadow: inset 0 0 0 2px #316790; }
+    .norm-grid.ln .value[data-row="2"] { background: #e2eee8; box-shadow: inset 0 0 0 2px #176b52; }
+    .axis-explain { margin: 0; padding: 13px 18px 16px; border-top: 1px solid #e0dce5; color: #4e4655; font-size: 13px; }
+    .axis-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      padding: 0 18px 16px;
+      color: #5d5368;
+      font-size: 10px;
+    }
+    .axis-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .axis-legend i { width: 11px; height: 11px; border: 1px solid currentColor; background: var(--swatch); }
+    .stat-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin: 20px 0;
+      border: 1px solid #d2ccd8;
+      background: #d2ccd8;
+    }
+    .stat-strip > div { padding: 14px; background: white; }
+    .stat-strip b { display: block; color: var(--accent); font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+    .stat-strip code { display: block; margin-top: 7px; white-space: nowrap; }
+    .axis-card {
+      overflow-x: auto;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-top: 3px solid var(--accent);
+      background: white;
+    }
+    .axis-card h3 { margin-bottom: 12px; }
+    .axis-card code { white-space: nowrap; }
+    .train-eval {
+      display: grid;
+      grid-template-columns: 1fr 52px 1fr;
+      align-items: stretch;
+      margin: 24px 0;
+      border: 1px solid #c9c3cf;
+      background: white;
+    }
+    .train-eval > div { padding: 20px; }
+    .train-eval .arrow-cell { display: grid; place-items: center; padding: 0; background: #eeeaf2; color: var(--accent); font-size: 24px; font-weight: 900; }
+    .train-eval b { display: block; margin-bottom: 8px; color: var(--accent); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+    .train-eval p { margin: 0; color: var(--muted); font-size: 13px; }
+    .mode-table td:nth-child(2), .mode-table td:nth-child(3) { min-width: 230px; }
+    .norm-family {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+    .norm-family > div { padding: 18px; border: 1px solid var(--line); background: white; }
+    .norm-family b { display: block; margin-bottom: 7px; color: var(--accent); }
+    .norm-family p { margin: 0; color: var(--muted); font-size: 13px; }
+    @media (max-width: 820px) {
+      .tab:not(#overview) h1 { font-size: 36px; }
+      .axis-explorer { margin-right: -12px; margin-left: -12px; }
+      .axis-explorer-head { align-items: flex-start; flex-direction: column; gap: 3px; }
+      .stat-strip { grid-template-columns: 1fr; }
+      .stat-strip code { white-space: normal; }
+      .train-eval { grid-template-columns: 1fr; }
+      .train-eval .arrow-cell { min-height: 42px; transform: rotate(90deg); }
+      .norm-family { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body data-guide-title="BatchNorm vs LayerNorm" style="--accent:#74528c;--accent-dark:#513864;--accent-soft:#e9e1ee">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">μσ</span><span>BatchNorm vs LayerNorm</span></div>
+      <p>Same standardization formula, different statistical neighborhoods and deployment behavior.</p>
+    </div>
+    <div class="nav-label">Guide</div>
+    <button class="tab-btn active" data-tab="build" data-panels="overview,axes,batchnorm,layernorm"><span class="num">01</span>Build the idea</button>
+    <button class="tab-btn" data-tab="reason" data-panels="worked,train-eval,shapes,placement,choice"><span class="num">02</span>Reason with it</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">03</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">04</span>Papers &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20Activation%20Functions%20and%20SwiGLU/">Activation companion</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">BatchNorm vs LayerNorm / Build the idea</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/LayerNorm.pdf">LayerNorm PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Normalization · the axis is the algorithm</div>
+      <h1>BatchNorm compares columns. LayerNorm compares rows.</h1>
+      <p class="lede">Both subtract a mean, divide by a standard deviation, then apply learned scale and shift. The decisive question is: which values are allowed to contribute to that mean and variance?</p>
+      <div class="meta-row"><span class="chip primary">complete \(3\times4\) example</span><span class="chip">normalization axes</span><span class="chip">train vs eval</span><span class="chip">CNN shapes</span><span class="chip">Transformer placement</span></div>
+
+      <div class="math"><span class="label">Shared skeleton</span>
+        \[
+        \widehat x=\frac{x-\mu}{\sqrt{\sigma^2+\epsilon}},\qquad
+        y=\gamma\odot\widehat x+\beta.
+        \]
+      </div>
+
+      <h2>The same matrix, two statistical neighborhoods</h2>
+      <div class="axis-explorer" data-axis-explorer>
+        <div class="axis-explorer-head"><strong>Who shares \(\mu\) and \(\sigma^2\)?</strong><span>Click a normalization mode; matching colors share statistics.</span></div>
+        <div class="axis-buttons"><button class="active" data-axis-mode="bn">BatchNorm · columns</button><button data-axis-mode="ln">LayerNorm · rows</button></div>
+        <div class="norm-grid-scroll">
+          <div class="norm-grid bn">
+            <div class="axis">sample \ feature</div><div class="axis">f₁</div><div class="axis">f₂</div><div class="axis">f₃</div><div class="axis">f₄</div>
+            <div class="axis">sample 1</div><div class="value" data-row="0" data-col="0">1</div><div class="value" data-row="0" data-col="1">2</div><div class="value" data-row="0" data-col="2">3</div><div class="value" data-row="0" data-col="3">4</div>
+            <div class="axis">sample 2</div><div class="value" data-row="1" data-col="0">3</div><div class="value" data-row="1" data-col="1">4</div><div class="value" data-row="1" data-col="2">7</div><div class="value" data-row="1" data-col="3">6</div>
+            <div class="axis">sample 3</div><div class="value" data-row="2" data-col="0">5</div><div class="value" data-row="2" data-col="1">9</div><div class="value" data-row="2" data-col="2">8</div><div class="value" data-row="2" data-col="3">11</div>
+          </div>
+        </div>
+        <div class="axis-legend">
+          <span style="--swatch:#dfeaf2;color:#316790"><i></i>group 1</span>
+          <span style="--swatch:#f7ead8;color:#a66b10"><i></i>group 2</span>
+          <span style="--swatch:#e2eee8;color:#176b52"><i></i>group 3</span>
+          <span style="--swatch:#f5e4e1;color:#a24b3f"><i></i>group 4</span>
+        </div>
+        <p class="axis-explain" data-axis-explain>BatchNorm forms four groups—one vertical group per feature. Sample 1’s first value depends on samples 2 and 3’s first values.</p>
+      </div>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>BatchNorm on \(X\in\mathbb R^{B\times D}\)</b>
+          \[
+          \mu_j=\frac1B\sum_{b=1}^{B}x_{bj},\quad
+          \sigma_j^2=\frac1B\sum_b(x_{bj}-\mu_j)^2
+          \]
+          <p>Statistics indexed by feature \(j\); training examples are coupled.</p>
+        </div>
+        <div class="formula-card"><b>LayerNorm on \(X\in\mathbb R^{B\times D}\)</b>
+          \[
+          \mu_b=\frac1D\sum_{j=1}^{D}x_{bj},\quad
+          \sigma_b^2=\frac1D\sum_j(x_{bj}-\mu_b)^2
+          \]
+          <p>Statistics indexed by example \(b\); examples remain independent.</p>
+        </div>
+      </div>
+
+      <div class="callout"><strong>Memory hook</strong><p>BatchNorm asks, “Is this feature unusually high relative to its peers in the current batch?” LayerNorm asks, “Is this feature unusually high relative to the other features in this representation?”</p></div>
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Batch Normalization</strong>Sergey Ioffe &amp; Christian Szegedy · ICML 2015</div><div class="paper-links"><a href="papers/BatchNorm.pdf">Local PDF</a><a href="https://arxiv.org/abs/1502.03167">arXiv</a></div></div>
+        <div class="paper"><div><strong>Layer Normalization</strong>Jimmy Lei Ba, Jamie Ryan Kiros &amp; Geoffrey Hinton · 2016</div><div class="paper-links"><a href="papers/LayerNorm.pdf">Local PDF</a><a href="https://arxiv.org/abs/1607.06450">arXiv</a></div></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="axes"><div class="page">
+      <div class="eyebrow">Step 1 · Name every axis before writing a formula</div>
+      <h1>“Normalize the activations” is incomplete until the reduction axes are explicit.</h1>
+      <p class="lede">A tensor has sample, channel, token, spatial, and feature axes. Normalization selects reduction axes for statistics and parameter axes for \(\gamma,\beta\); those choices need not be identical across methods.</p>
+
+      <h2>Axis map</h2>
+      <div class="table-wrap"><table><thead><tr><th>Input shape</th><th>Method</th><th>Statistics reduce over</th><th>Typical \(\gamma,\beta\) shape</th></tr></thead><tbody>
+        <tr><td><code>[B,D]</code></td><td>BatchNorm1d</td><td>\(B\), separately for every \(D\)</td><td><code>[D]</code></td></tr>
+        <tr><td><code>[B,D]</code></td><td>LayerNorm(D)</td><td>\(D\), separately for every \(B\)</td><td><code>[D]</code></td></tr>
+        <tr><td><code>[B,C,H,W]</code></td><td>BatchNorm2d</td><td>\(B,H,W\), separately for every \(C\)</td><td><code>[C]</code></td></tr>
+        <tr><td><code>[B,T,D]</code></td><td>Transformer LayerNorm(D)</td><td>\(D\), separately for every \((B,T)\)</td><td><code>[D]</code></td></tr>
+        <tr><td><code>[B,C,H,W]</code></td><td>LayerNorm([C,H,W])</td><td>\(C,H,W\), separately for every \(B\)</td><td><code>[C,H,W]</code></td></tr>
+      </tbody></table></div>
+
+      <h2>Reduction axes versus affine axes</h2>
+      <div class="grid2">
+        <div class="axis-card"><h3>BatchNorm2d</h3><code>mean(x, axes=(B,H,W)) → [C]</code><p>One mean/variance and usually one learned scale/shift per channel.</p></div>
+        <div class="axis-card"><h3>Transformer LayerNorm</h3><code>mean(x, axis=D) → [B,T,1]</code><p>One mean/variance per token vector; learned scale/shift shared over batch and token positions.</p></div>
+      </div>
+
+      <div class="callout red"><strong>“Layer” is not a universal axis name.</strong><p>A LayerNorm API normalizes the final dimensions listed by <code>normalized_shape</code>. In a Transformer that is usually only \(D\); in another architecture it can be several trailing dimensions.</p></div>
+
+      <h2>Count the statistical groups</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>BatchNorm on \([B,D]\)</b>\[\text{number of groups}=D,\qquad \text{values/group}=B\]</div>
+        <div class="formula-card"><b>LayerNorm(D) on \([B,T,D]\)</b>\[\text{number of groups}=BT,\qquad \text{values/group}=D\]</div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="batchnorm"><div class="page">
+      <div class="eyebrow">Step 2 · Understand BatchNorm</div>
+      <h1>BatchNorm makes each feature coordinate relative to a batch population.</h1>
+      <p class="lede">During training, the current mini-batch supplies statistics. Learned \(\gamma_j,\beta_j\) then let the model restore or change the normalized coordinate’s useful scale and location.</p>
+
+      <div class="derivation">
+        <h3>For feature \(j\) in a vector batch</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\mu_j^{(B)}=\frac1B\sum_{b=1}^{B}x_{bj}\]</div><div class="step-explain"><strong>Batch mean.</strong>Collect the same feature from every example in the mini-batch.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[(\sigma_j^2)^{(B)}=\frac1B\sum_b(x_{bj}-\mu_j^{(B)})^2\]</div><div class="step-explain"><strong>Batch variance.</strong>The forward normalization commonly uses the population-form denominator \(B\); library running-variance details can differ.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[y_{bj}=\gamma_j\frac{x_{bj}-\mu_j^{(B)}}{\sqrt{(\sigma_j^2)^{(B)}+\epsilon}}+\beta_j\]</div><div class="step-explain"><strong>Standardize, then learn an affine map.</strong>After \(\gamma,\beta\), the output is not required to retain mean zero or variance one.</div></div>
+      </div>
+
+      <h2>Why batch composition matters</h2>
+      <div class="grid3">
+        <div class="concept"><h3>Coupling</h3><p>A sample’s training output changes if its batch companions change, even when the sample itself is identical.</p></div>
+        <div class="concept"><h3>Noise</h3><p>Mini-batch statistics add stochasticity. It can regularize, but very small or non-IID batches can make estimates unreliable.</p></div>
+        <div class="concept"><h3>Synchronization</h3><p>Distributed training may compute local-device statistics or synchronize them across devices, changing group size and communication.</p></div>
+      </div>
+
+      <h2>What BatchNorm may help</h2>
+      <p>The original paper motivated BatchNorm through “internal covariate shift.” Later empirical work challenged that as the main explanation and found evidence for smoother, more predictable optimization. The safest statement is practical: BatchNorm often permits stable, faster optimization in architectures and batch regimes where its statistics are reliable.</p>
+      <div class="paper"><div><strong>How Does Batch Normalization Help Optimization?</strong>Shibani Santurkar et al. · NeurIPS 2018</div><div class="paper-links"><a href="papers/BatchNorm-Optimization.pdf">Local PDF</a><a href="https://arxiv.org/abs/1805.11604">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="layernorm"><div class="page">
+      <div class="eyebrow">Step 3 · Understand LayerNorm</div>
+      <h1>LayerNorm standardizes each representation without consulting another example.</h1>
+      <p class="lede">For a Transformer token, all \(D\) channels of that token form one normalization group. Batch size, sequence position, and other users do not enter its statistics.</p>
+
+      <div class="derivation">
+        <h3>For one representation \(x_b\in\mathbb R^D\)</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\mu_b=\frac1D\sum_{j=1}^{D}x_{bj}\]</div><div class="step-explain"><strong>Within-example mean.</strong>One example—or one token vector—supplies all values.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\sigma_b^2=\frac1D\sum_j(x_{bj}-\mu_b)^2\]</div><div class="step-explain"><strong>Within-example variance.</strong>There are no running statistics and no estimate from neighboring examples.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[y_{bj}=\gamma_j\frac{x_{bj}-\mu_b}{\sqrt{\sigma_b^2+\epsilon}}+\beta_j\]</div><div class="step-explain"><strong>Shared learned coordinates.</strong>Statistics differ by example/token, while \(\gamma_j,\beta_j\) are shared model parameters.</div></div>
+      </div>
+
+      <h2>Why sequence models like it</h2>
+      <div class="grid2">
+        <div class="note"><h3>Batch-size independence</h3><p>Training with batch one or serving one token/user does not require a different source of statistics.</p></div>
+        <div class="note"><h3>Variable sequence lengths</h3><p>Each token vector is normalized locally, so padding and length do not change another token’s LayerNorm statistics.</p></div>
+        <div class="note"><h3>Same train/eval computation</h3><p>No running mean/variance must be accumulated, serialized, or frozen.</p></div>
+        <div class="note"><h3>Residual-stream scale control</h3><p>Placed around attention and MLP sublayers, LayerNorm helps keep their inputs or outputs in a manageable range.</p></div>
+      </div>
+
+      <h2>Invariances before \(\gamma,\beta\)</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Shift every feature equally</b>\[\operatorname{LN}(x+c\mathbf 1)=\operatorname{LN}(x)\]<p>The per-example mean absorbs the shift.</p></div>
+        <div class="formula-card"><b>Positive uniform rescaling</b>\[\operatorname{LN}(ax)\approx\operatorname{LN}(x),\quad a&gt;0\]<p>Ignoring \(\epsilon\), scale cancels between numerator and denominator.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="worked"><div class="page">
+      <div class="eyebrow">Complete calculation · both methods on one matrix</div>
+      <h1>Normalize the same matrix two different ways.</h1>
+      <p class="lede">Set \(\epsilon=0\) and \(\gamma=1,\beta=0\) for the standardization steps. We apply the learned affine transform separately at the end.</p>
+
+      <div class="math"><span class="label">Input \(X\in\mathbb R^{3\times4}\)</span>
+        \[
+        X=\begin{bmatrix}
+        1&amp;2&amp;3&amp;4\\
+        3&amp;4&amp;7&amp;6\\
+        5&amp;9&amp;8&amp;11
+        \end{bmatrix}.
+        \]
+      </div>
+
+      <h2>BatchNorm · calculate down each column</h2>
+      <div class="stat-strip">
+        <div><b>feature 1</b><code>μ=3, var=2.6667</code></div>
+        <div><b>feature 2</b><code>μ=5, var=8.6667</code></div>
+        <div><b>feature 3</b><code>μ=6, var=4.6667</code></div>
+        <div><b>feature 4</b><code>μ=7, var=8.6667</code></div>
+      </div>
+      <div class="derivation">
+        <h3>Show two columns explicitly</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\mu_1=(1+3+5)/3=3\]\[\sigma_1^2=\bigl[(1-3)^2+(3-3)^2+(5-3)^2\bigr]/3=8/3\]</div><div class="step-explain"><strong>Feature 1 uses \([1,3,5]\).</strong>Its standard deviation is \(\sqrt{8/3}=1.6330\).</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\mu_2=(2+4+9)/3=5\]\[\sigma_2^2=\bigl[(-3)^2+(-1)^2+4^2\bigr]/3=26/3\]</div><div class="step-explain"><strong>Feature 2 uses \([2,4,9]\).</strong>Its standard deviation is \(\sqrt{26/3}=2.9439\).</div></div>
+      </div>
+      <div class="math"><span class="label">Batch-normalized matrix</span>
+        \[
+        \widehat X_{\rm BN}\approx
+        \begin{bmatrix}
+        -1.2247&amp;-1.0190&amp;-1.3887&amp;-1.0190\\
+        0&amp;-0.3397&amp;0.4629&amp;-0.3397\\
+        1.2247&amp;1.3587&amp;0.9258&amp;1.3587
+        \end{bmatrix}.
+        \]
+      </div>
+      <p>Check each output column: its three values have mean approximately zero and population variance approximately one.</p>
+
+      <h2>LayerNorm · calculate across each row</h2>
+      <div class="stat-strip">
+        <div><b>sample 1</b><code>μ=2.5, var=1.25</code></div>
+        <div><b>sample 2</b><code>μ=5, var=2.5</code></div>
+        <div><b>sample 3</b><code>μ=8.25, var=4.6875</code></div>
+        <div><b>groups</b><code>3 rows × 4 values</code></div>
+      </div>
+      <div class="derivation">
+        <h3>Show sample 1 completely</h3>
+        <div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\mu_{\rm row1}=(1+2+3+4)/4=2.5\]</div><div class="step-explain"><strong>Use only the first sample.</strong>No value from rows 2 or 3 participates.</div></div>
+        <div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[\sigma_{\rm row1}^2=\bigl[(-1.5)^2+(-0.5)^2+0.5^2+1.5^2\bigr]/4=1.25\]</div><div class="step-explain"><strong>Standard deviation \(=1.1180\).</strong>All four features share this denominator.</div></div>
+        <div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[\widehat x_1=[-1.3416,-0.4472,0.4472,1.3416]\]</div><div class="step-explain"><strong>Normalize each feature in the row.</strong>The row now has mean zero and population variance one.</div></div>
+      </div>
+      <div class="math"><span class="label">Layer-normalized matrix</span>
+        \[
+        \widehat X_{\rm LN}\approx
+        \begin{bmatrix}
+        -1.3416&amp;-0.4472&amp;0.4472&amp;1.3416\\
+        -1.2649&amp;-0.6325&amp;1.2649&amp;0.6325\\
+        -1.5011&amp;0.3464&amp;-0.1155&amp;1.2702
+        \end{bmatrix}.
+        \]
+      </div>
+
+      <h2>Apply learned \(\gamma,\beta\)</h2>
+      <div class="math">
+        \[
+        \gamma=[2,0.5,1,1.5],\qquad \beta=[0,1,-1,0.5]
+        \]
+        \[
+        y_1=\gamma\odot\widehat x_1+\beta
+        \approx[-2.6833,0.7764,-0.5528,2.5125].
+        \]
+      </div>
+      <div class="callout"><strong>Normalization is not the final output constraint.</strong><p>The standardized vector has mean zero and variance one; the learned affine output generally does not. \(\gamma,\beta\) preserve the layer’s ability to choose useful scales and offsets.</p></div>
+    </div></section>
+
+    <section class="tab" id="train-eval"><div class="page">
+      <div class="eyebrow">Deployment behavior · mode matters for BatchNorm</div>
+      <h1>BatchNorm changes its source of statistics at evaluation; LayerNorm does not.</h1>
+
+      <div class="train-eval">
+        <div><b>BatchNorm training</b><p>Normalize with the current mini-batch’s mean and variance. Also update running estimates stored in the module.</p></div>
+        <div class="arrow-cell">→</div>
+        <div><b>BatchNorm evaluation</b><p>Normalize with frozen running estimates, so one prediction does not depend on whichever examples happen to be served beside it.</p></div>
+      </div>
+
+      <div class="train-eval">
+        <div><b>LayerNorm training</b><p>Compute mean and variance from the current example/token’s normalized dimensions.</p></div>
+        <div class="arrow-cell">=</div>
+        <div><b>LayerNorm evaluation</b><p>Use the same per-example/token calculation. There is no running-statistics state.</p></div>
+      </div>
+
+      <h2>A sample can change under BatchNorm training</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Batch A</b>\[x=3\text{ inside }[1,3,5]\Rightarrow \widehat x=0\]</div>
+        <div class="formula-card"><b>Batch B</b>\[x=3\text{ inside }[3,3,9]\Rightarrow \widehat x\approx-0.7071\]</div>
+      </div>
+      <p>The identical scalar \(x=3\) changes because its peers change. LayerNorm for the same representation would ignore other examples entirely.</p>
+
+      <h2>Running-statistics pitfalls</h2>
+      <div class="caveats">
+        <div class="caveat"><b>Domain shift</b><span>Frozen training statistics may poorly represent a changed evaluation distribution.</span></div>
+        <div class="caveat"><b>Fine-tuning mode</b><span>Accidentally updating or freezing BatchNorm statistics can materially change behavior.</span></div>
+        <div class="caveat"><b>Small batches</b><span>Noisy current statistics and slowly adapted running estimates can both be problematic.</span></div>
+        <div class="caveat"><b>Library details</b><span>Momentum conventions and biased/unbiased variance handling differ; read the exact framework documentation.</span></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="shapes"><div class="page">
+      <div class="eyebrow">Architecture shapes · CNNs and Transformers</div>
+      <h1>The common use cases follow directly from which axes are stable.</h1>
+
+      <h2>Convolutional activations \([B,C,H,W]\)</h2>
+      <div class="grid2">
+        <div class="axis-card"><h3>BatchNorm2d</h3><code>stats over (B,H,W), one group per C</code><p>Even with small \(B\), each channel may have \(BHW\) values. It also respects the idea that one convolutional channel means the same thing across spatial positions.</p></div>
+        <div class="axis-card"><h3>LayerNorm</h3><code>stats over normalized_shape</code><p><code>LayerNorm([C,H,W])</code> normalizes an entire sample and learns elementwise affine parameters; channel-last <code>LayerNorm(C)</code> is a different operation.</p></div>
+      </div>
+
+      <h2>Transformer activations \([B,T,D]\)</h2>
+      <div class="math">
+        \[
+        \mu_{b,t}=\frac1D\sum_{j=1}^{D}x_{b,t,j},\qquad
+        \sigma_{b,t}^2=\frac1D\sum_j(x_{b,t,j}-\mu_{b,t})^2.
+        \]
+      </div>
+      <p>Transformer LayerNorm(D) creates \(BT\) independent statistical groups. Token \((b,t)\) does not use a different token’s channels, so variable lengths and autoregressive serving do not create a train/eval statistics mismatch.</p>
+
+      <h2>Why naïve BatchNorm is awkward for tokens</h2>
+      <div class="grid3">
+        <div class="concept"><h3>Variable lengths</h3><p>Pooling over token positions requires careful masking or allows padding to corrupt statistics.</p></div>
+        <div class="concept"><h3>Autoregressive serving</h3><p>Inference may process one new token, unlike the token populations seen during training.</p></div>
+        <div class="concept"><h3>Cross-example coupling</h3><p>One sequence’s representation depends on other sequences assigned to the same mini-batch/device.</p></div>
+      </div>
+
+      <h2>Small-batch nuance</h2>
+      <div class="plain-note"><strong>Batch size one does not always mean one statistic value.</strong> BatchNorm2d still has \(H\times W\) positions per channel. A vector BatchNorm with shape \([1,D]\), however, has only one value per feature and cannot estimate useful training variance from that batch.</div>
+    </div></section>
+
+    <section class="tab" id="placement"><div class="page">
+      <div class="eyebrow">Residual networks · normalization location</div>
+      <h1>Choosing LayerNorm does not yet specify where it sits in a Transformer block.</h1>
+      <p class="lede">Pre-LN and Post-LN use the same normalization formula but expose different residual and gradient paths.</p>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Post-LN</b>\[y=\operatorname{LN}(x+F(x))\]<p>The original Transformer normalized after each residual addition.</p></div>
+        <div class="formula-card"><b>Pre-LN</b>\[y=x+F(\operatorname{LN}(x))\]<p>The residual path contains an explicit identity route around the normalized sublayer.</p></div>
+      </div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Residual path comparison</strong><span>Same LN, different graph</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X1["x"] --> F1["F"] --> ADD1["add x"] --> LN1["LayerNorm"] --> Y1["Post-LN y"]
+  X1 --> ADD1
+  X2["x"] --> LN2["LayerNorm"] --> F2["F"] --> ADD2["add x"] --> Y2["Pre-LN y"]
+  X2 --> ADD2
+  class X1,X2 input; class F1,F2 param; class LN1,LN2 route; class ADD1,ADD2 op; class Y1,Y2 output;
+  classDef input fill:#dfebf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#e9e1ee,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#e2eee8,stroke:#176b52,stroke-width:2px;
+  classDef output fill:#17211c,color:#fff,stroke:#17211c,stroke-width:2px;
+        </pre></div>
+        <figcaption>Pre-LN often improves optimization stability in deep Transformers, but normalization placement remains an architectural choice with tradeoffs—not a definition of LayerNorm itself.</figcaption>
+      </figure>
+
+      <h2>Do not collapse three questions</h2>
+      <div class="grid3">
+        <div class="note"><h3>Which method?</h3><p>BatchNorm, LayerNorm, RMSNorm, GroupNorm, or another normalization family.</p></div>
+        <div class="note"><h3>Which axes?</h3><p>The dimensions supplying statistics and the dimensions carrying learned affine parameters.</p></div>
+        <div class="note"><h3>Where in the graph?</h3><p>Before or after a linear/activation/sublayer and before or after residual addition.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="choice"><div class="page">
+      <div class="eyebrow">Decision guide · match the statistical neighborhood to the workload</div>
+      <h1>Neither normalization is universally better.</h1>
+
+      <div class="table-wrap mode-table"><table><thead><tr><th>Question</th><th>BatchNorm</th><th>LayerNorm</th></tr></thead><tbody>
+        <tr><td>Statistics depend on</td><td>Other examples and possibly spatial/time positions.</td><td>The current example/token’s normalized features.</td></tr>
+        <tr><td>Train/eval formula</td><td>Different source: batch stats vs running stats.</td><td>Same local calculation.</td></tr>
+        <tr><td>Batch-size sensitivity</td><td>Can be substantial.</td><td>None in the normalization statistics.</td></tr>
+        <tr><td>Typical strength</td><td>Vision CNNs with sufficiently large, representative groups.</td><td>Transformers, RNNs, variable-length and autoregressive workloads.</td></tr>
+        <tr><td>Distributed concern</td><td>Local vs synchronized batch statistics.</td><td>No cross-device statistic synchronization.</td></tr>
+        <tr><td>Regularization effect</td><td>Batch-statistic noise can matter.</td><td>No noise from batch composition.</td></tr>
+      </tbody></table></div>
+
+      <h2>A practical decision sequence</h2>
+      <div class="timeline">
+        <div class="event"><b>1 · Write the tensor shape</b><strong>Name B, C, T, H, W, D.</strong><p>If the axes are vague, the normalization choice is not yet defined.</p></div>
+        <div class="event"><b>2 · Choose statistical peers</b><strong>Should examples influence one another?</strong><p>For stable image batches, often yes; for independent token serving, usually no.</p></div>
+        <div class="event"><b>3 · Inspect deployment</b><strong>Will evaluation batch composition match training?</strong><p>If not, running statistics and mode management become central.</p></div>
+        <div class="event"><b>4 · Benchmark the architecture</b><strong>Optimization is empirical.</strong><p>Compare converged quality, stability, throughput, and sensitivity—not only one training-loss snapshot.</p></div>
+      </div>
+
+      <h2>Nearby alternatives</h2>
+      <div class="norm-family">
+        <div><b>GroupNorm</b><p>Normalizes groups of channels per example; common when CNN batches are too small for reliable BatchNorm.</p></div>
+        <div><b>InstanceNorm</b><p>Normalizes each channel per example across spatial dimensions; useful when instance-level contrast/style matters.</p></div>
+        <div><b>RMSNorm</b><p>Rescales by root mean square without subtracting the mean; widely used as a simpler LayerNorm-relative in modern sequence models.</p></div>
+      </div>
+      <div class="paper"><div><strong>Root Mean Square Layer Normalization</strong>Biao Zhang &amp; Rico Sennrich · NeurIPS 2019</div><div class="paper-links"><a href="papers/RMSNorm.pdf">Local PDF</a><a href="https://arxiv.org/abs/1910.07467">arXiv</a></div></div>
+
+      <div class="quiz"><h3>Axis check</h3><p>For a Transformer tensor \([B,T,D]\), how many separate mean/variance pairs does LayerNorm(D) compute?</p><button data-answer="norm-axis-answer">Reveal answer</button><div class="answer" id="norm-axis-answer">It computes \(B\times T\) pairs—one mean and variance for every token vector—each using its \(D\) feature values.</div></div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Rapid recall</div>
+      <h1>BatchNorm and LayerNorm on one sheet.</h1>
+
+      <div class="table-wrap"><table><thead><tr><th>Property</th><th>BatchNorm</th><th>LayerNorm</th></tr></thead><tbody>
+        <tr><td>Vector input \([B,D]\)</td><td>Reduce over B for each D.</td><td>Reduce over D for each B.</td></tr>
+        <tr><td>Statistics count</td><td>D groups of B values.</td><td>B groups of D values.</td></tr>
+        <tr><td>Learned affine</td><td>Usually one \(\gamma,\beta\) per feature/channel.</td><td>One \(\gamma,\beta\) per normalized element/feature.</td></tr>
+        <tr><td>Training</td><td>Current group statistics + running-stat update.</td><td>Current example/token statistics.</td></tr>
+        <tr><td>Evaluation</td><td>Usually frozen running statistics.</td><td>Same as training.</td></tr>
+        <tr><td>Canonical domain</td><td>CNNs with useful batch/spatial populations.</td><td>Sequence models and Transformers.</td></tr>
+        <tr><td>Main trap</td><td>Small/non-IID batches and train/eval state.</td><td>Assuming “layer” tells you <code>normalized_shape</code>.</td></tr>
+      </tbody></table></div>
+
+      <h2>Equations from memory</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>BatchNorm</b>\[\mu_j=\mathbb E_b[x_{bj}],\quad y_{bj}=\gamma_j\frac{x_{bj}-\mu_j}{\sqrt{\sigma_j^2+\epsilon}}+\beta_j\]</div>
+        <div class="formula-card"><b>LayerNorm</b>\[\mu_b=\mathbb E_j[x_{bj}],\quad y_{bj}=\gamma_j\frac{x_{bj}-\mu_b}{\sqrt{\sigma_b^2+\epsilon}}+\beta_j\]</div>
+      </div>
+
+      <div class="quiz"><h3>Five-question self-test</h3><p>1. Which axis does vector BatchNorm reduce?<br>2. Why does BatchNorm need running statistics?<br>3. Why is LayerNorm natural for autoregressive inference?<br>4. Does affine output have variance one?<br>5. Distinguish Pre-LN from Post-LN.</p><button data-answer="norm-final">Reveal compact answers</button><div class="answer" id="norm-final">1. Batch/examples for each feature. 2. Evaluation should not depend on serving companions. 3. It uses only the current token’s features. 4. Not generally after learned \(\gamma,\beta\). 5. Pre-LN normalizes before the residual sublayer; Post-LN normalizes after residual addition.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Reading room · primary papers and careful explainers</div>
+      <h1>Read the axes in the papers, then verify your framework’s exact semantics.</h1>
+      <p class="lede">All matrix diagrams and worked numbers here are original teaching constructions. External sources are linked rather than copied so notation, caveats, and implementation details remain in context.</p>
+
+      <h2>Primary and analytical papers</h2>
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift</strong>Sergey Ioffe &amp; Christian Szegedy · ICML 2015</div><div class="paper-links"><a href="papers/BatchNorm.pdf">Local PDF</a><a href="https://arxiv.org/abs/1502.03167">arXiv</a></div></div>
+        <div class="paper"><div><strong>Layer Normalization</strong>Jimmy Lei Ba, Jamie Ryan Kiros &amp; Geoffrey Hinton · 2016</div><div class="paper-links"><a href="papers/LayerNorm.pdf">Local PDF</a><a href="https://arxiv.org/abs/1607.06450">arXiv</a></div></div>
+        <div class="paper"><div><strong>How Does Batch Normalization Help Optimization?</strong>Shibani Santurkar et al. · NeurIPS 2018</div><div class="paper-links"><a href="papers/BatchNorm-Optimization.pdf">Local PDF</a><a href="https://arxiv.org/abs/1805.11604">arXiv</a></div></div>
+        <div class="paper"><div><strong>Root Mean Square Layer Normalization</strong>Biao Zhang &amp; Rico Sennrich · NeurIPS 2019</div><div class="paper-links"><a href="papers/RMSNorm.pdf">Local PDF</a><a href="https://arxiv.org/abs/1910.07467">arXiv</a></div></div>
+      </div>
+
+      <h2>Implementation references and explainers</h2>
+      <div class="grid2">
+        <div class="note"><h3>PyTorch BatchNorm docs</h3><p>Exact running-statistics, momentum, affine, and variance-estimator behavior for the current implementation.</p><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.BatchNorm1d.html">Open documentation</a></div>
+        <div class="note"><h3>PyTorch LayerNorm docs</h3><p><code>normalized_shape</code>, trailing-axis behavior, affine parameters, and train/eval semantics.</p><a href="https://docs.pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html">Open documentation</a></div>
+        <div class="note"><h3>BatchNorm forward-pass walkthrough</h3><p>Tyler Nichols’ technical walkthrough expands the forward calculation and compares the statistical axes.</p><a href="https://blog.tnichols.org/posts/batchnorm-forward/">Open explainer</a></div>
+        <div class="note"><h3>Transformer LayerNorm placement</h3><p>Xiong et al. analyze gradient behavior in Pre-LN and Post-LN Transformer architectures.</p><a href="https://arxiv.org/abs/2002.04745">Open paper</a></div>
+      </div>
+
+      <h2>Accuracy and scope notes</h2>
+      <div class="grid2">
+        <div class="note"><h3>Variance convention</h3><p>The worked example uses the population-form denominator equal to group size and sets \(\epsilon=0\). Libraries add \(\epsilon\) and may treat running variance differently.</p></div>
+        <div class="note"><h3>Optimization mechanism</h3><p>The guide presents the original motivation and later challenge without claiming one settled causal explanation for BatchNorm’s success.</p></div>
+        <div class="note"><h3>Architecture recommendations</h3><p>“CNN” and “Transformer” are common patterns, not laws. Batch regime, layout, residual design, and implementation determine results.</p></div>
+        <div class="note"><h3>Numerical values</h3><p>The \(3\times4\) matrix and affine parameters were selected for transparent hand calculation, not copied from a trained network.</p></div>
+      </div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mathjax-tex-svg.js"></script>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+<script>
+  (() => {
+    const explorer = document.querySelector('[data-axis-explorer]');
+    if (!explorer) return;
+    const grid = explorer.querySelector('.norm-grid');
+    const explanation = explorer.querySelector('[data-axis-explain]');
+    const copy = {
+      bn: 'BatchNorm forms four groups—one vertical group per feature. Sample 1’s first value depends on samples 2 and 3’s first values.',
+      ln: 'LayerNorm forms three groups—one horizontal group per sample. Every row is normalized independently of the other rows.'
+    };
+    explorer.querySelectorAll('[data-axis-mode]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const mode = button.dataset.axisMode;
+        explorer.querySelectorAll('[data-axis-mode]').forEach((candidate) => candidate.classList.toggle('active', candidate === button));
+        grid.classList.toggle('bn', mode === 'bn');
+        grid.classList.toggle('ln', mode === 'ln');
+        explanation.textContent = copy[mode];
+      });
+    });
+  })();
+</script>
+</body>
+</html>
