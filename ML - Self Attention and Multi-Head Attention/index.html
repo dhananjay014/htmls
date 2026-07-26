@@ -6,9 +6,8 @@
   <meta name="description" content="A from-scratch visual and numerical guide to self-attention and multi-head attention, including every matrix shape and worked calculation.">
   <title>Self-Attention &amp; Multi-Head Attention · Visual Field Guide</title>
   <script>
-    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
   </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <link rel="stylesheet" href="../assets/guide.css">
   <style>
     .attention-map {
@@ -66,7 +65,13 @@
     }
     .shape-step { min-width: 130px; padding: 15px; background: white; }
     .shape-step b { display: block; color: var(--accent); font-size: 12px; }
-    .shape-step code { display: block; margin: 5px 0; font-size: 12px; }
+    .math-label {
+      color: #7b332c;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 750;
+    }
+    .symbol .math-label { display: block; }
+    .shape-step .math-label { display: block; margin: 5px 0; font-size: 12px; }
     .shape-step small { color: var(--muted); }
     .number-note {
       margin: 12px 0;
@@ -184,12 +189,12 @@ flowchart LR
       <p class="lede">Our running example uses the sequence “I love ML,” one batch item, and deliberately small vectors. Real models use the same operations with hundreds or thousands of dimensions.</p>
 
       <div class="symbols">
-        <div class="symbol"><code>\(B=1\)</code>batch size</div>
-        <div class="symbol"><code>\(n=3\)</code>sequence length</div>
-        <div class="symbol"><code>\(d_{\text{model}}=4\)</code>embedding / residual width</div>
-        <div class="symbol"><code>\(h=2\)</code>attention heads later</div>
-        <div class="symbol"><code>\(d_k=2\)</code>query/key width per head</div>
-        <div class="symbol"><code>\(d_v=2\)</code>value width per head</div>
+        <div class="symbol"><span class="math-label">\(B=1\)</span>batch size</div>
+        <div class="symbol"><span class="math-label">\(n=3\)</span>sequence length</div>
+        <div class="symbol"><span class="math-label">\(d_{\text{model}}=4\)</span>embedding / residual width</div>
+        <div class="symbol"><span class="math-label">\(h=2\)</span>attention heads later</div>
+        <div class="symbol"><span class="math-label">\(d_k=2\)</span>query/key width per head</div>
+        <div class="symbol"><span class="math-label">\(d_v=2\)</span>value width per head</div>
       </div>
 
       <h2>Token embedding plus position</h2>
@@ -245,11 +250,11 @@ flowchart LR
       <p class="lede">Keep the token axis on the left and the feature axis on the right. Every equation becomes easier once you can say what each row and column means.</p>
 
       <div class="shape-strip" aria-label="Attention shape flow">
-        <div class="shape-step"><b>Input</b><code>\(X:[n,d_{\text{model}}]\)</code><small>one state per token</small></div>
-        <div class="shape-step"><b>Project</b><code>\(Q,K:[n,d_k]\)</code><small>\(V:[n,d_v]\)</small></div>
-        <div class="shape-step"><b>Compare</b><code>\(QK^\top:[n,n]\)</code><small>query rows × key columns</small></div>
-        <div class="shape-step"><b>Normalize</b><code>\(A:[n,n]\)</code><small>each row sums to 1</small></div>
-        <div class="shape-step"><b>Collect</b><code>\(AV:[n,d_v]\)</code><small>one context per query</small></div>
+        <div class="shape-step"><b>Input</b><span class="math-label">\(X:[n,d_{\text{model}}]\)</span><small>one state per token</small></div>
+        <div class="shape-step"><b>Project</b><span class="math-label">\(Q,K:[n,d_k]\)</span><small>\(V:[n,d_v]\)</small></div>
+        <div class="shape-step"><b>Compare</b><span class="math-label">\(QK^\top:[n,n]\)</span><small>query rows × key columns</small></div>
+        <div class="shape-step"><b>Normalize</b><span class="math-label">\(A:[n,n]\)</span><small>each row sums to 1</small></div>
+        <div class="shape-step"><b>Collect</b><span class="math-label">\(AV:[n,d_v]\)</span><small>one context per query</small></div>
       </div>
 
       <div class="derivation">
@@ -1054,6 +1059,7 @@ out = output_linear(concat)              # [B, n, d_model]</code></pre>
     </div></section>
   </main>
 </div>
+<script src="../assets/mathjax-tex-svg.js"></script>
 <script src="../assets/mermaid.min.js"></script>
 <script src="../assets/guide.js"></script>
 </body>

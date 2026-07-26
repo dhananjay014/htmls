@@ -13,6 +13,7 @@ const tabFilter = process.env.TAB_FILTER || "";
 const delay = (ms) => new Promise((resolveDelay) => setTimeout(resolveDelay, ms));
 
 const preferredShots = new Map([
+  ["ML - Feature Interactions", "deepfm"],
   ["ML - HSTU", "attention"],
   ["ML - Semantic IDs", "rqvae"],
   ["ML - Multimodal MMoE", "shazeer"],
@@ -39,7 +40,7 @@ const guides = readdirSync(root, { withFileTypes: true })
     const page = join(root, entry.name, "index.html");
     try {
       const html = readFileSync(page, "utf8");
-      if (!html.includes("../assets/guide.js")) return null;
+      if (!html.includes("../assets/guide.js") && entry.name !== "ML - Feature Interactions") return null;
       const tabs = tabDefinitionsFromHtml(html);
       if (!tabs.length) return null;
       return { dir: entry.name, page, tabs, shot: preferredShots.get(entry.name) || tabs[Math.floor(tabs.length / 2)].panels[0] };
@@ -158,6 +159,24 @@ async function collectMetrics(cdp) {
       }));
     const mermaids = active.flatMap((panel) => [...panel.querySelectorAll('.mermaid')]);
     const math = active.flatMap((panel) => [...panel.querySelectorAll('.math')]);
+    const rawMath = [];
+    active.forEach((panel) => {
+      const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const parent = node.parentElement;
+        const source = node.nodeValue || '';
+        const slash = String.fromCharCode(92);
+        if (!parent || parent.closest('script,style,pre,.mermaid,mjx-container')) continue;
+        if (source.includes(slash + '(') || source.includes(slash + '[')) {
+          rawMath.push({
+            tag: parent.tagName,
+            cls: parent.className?.baseVal || parent.className || '',
+            text: source.trim().slice(0, 100)
+          });
+        }
+      }
+    });
     return {
       id: active[0].id,
       ids: active.map((panel) => panel.id),
@@ -169,6 +188,7 @@ async function collectMetrics(cdp) {
       mermaidErrors: mermaids.filter((element) => /syntax error|parse error/i.test(element.textContent)).length,
       mathExpected: math.length,
       mathRendered: math.filter((element) => element.querySelector('mjx-container')).length,
+      rawMath: rawMath.slice(0, 8),
       rootOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth,
       uncontainedOverflow,
       viewport: [innerWidth, innerHeight]
@@ -285,6 +305,7 @@ try {
         report.mermaidRendered !== report.mermaidExpected ||
         report.mermaidErrors ||
         (report.mathExpected && report.mathRendered !== report.mathExpected) ||
+        report.rawMath.length ||
         report.rootOverflow > 2 ||
         report.uncontainedOverflow.length;
       if (bad) failed = true;
@@ -315,11 +336,13 @@ try {
         report.activeCount !== tab.panels.length ||
         !panelsMatch ||
         report.selectedButton !== tab.key ||
+        report.rawMath.length ||
         report.rootOverflow > 2 ||
         report.uncontainedOverflow.length;
       if (bad) failed = true;
       console.log(`${bad ? "FAIL" : "PASS"} mobile ${guide.dir}#${tab.key}`, JSON.stringify({
         ids: report.ids,
+        rawMath: report.rawMath,
         rootOverflow: report.rootOverflow,
         uncontainedOverflow: report.uncontainedOverflow,
         viewport: report.viewport

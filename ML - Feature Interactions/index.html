@@ -6,9 +6,8 @@
   <meta name="description" content="An intuition-first, mathematical field guide to feature interaction models for recommendation and CTR prediction.">
   <title>Feature Interactions: A Visual Field Guide</title>
   <script>
-    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
   </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <style>
     html{color-scheme:light}
     :root{--ink:#17211c;--muted:#617068;--paper:#f7f6f1;--surface:#fff;--line:#d8ddd8;--green:#176b52;--green2:#dcece5;--red:#a23f35;--red2:#f4e2df;--gold:#a66b10;--gold2:#f6ead2;--blue:#316790;--blue2:#dfebf3;--shadow:0 8px 24px rgba(24,35,29,.07)}
@@ -147,7 +146,7 @@ flowchart LR
       </pre><figcaption>The shared lookup is the defining implementation detail: gradients from both branches update the same embedding vectors.</figcaption></figure>
       <h2>The key economy</h2><p>Each active categorical feature retrieves one embedding \(\mathbf v_i\). The FM branch uses dot products \(\langle\mathbf v_i,\mathbf v_j\rangle\); the deep branch concatenates those same vectors. No separate embedding table is needed, and both objectives shape the representation.</p>
       <div class="derivation"><h3>Complete DeepFM forward pass</h3><div class="derivation-step"><div class="step-no">1</div><div class="step-formula">\[\mathbf e_j=\mathbf V_j\mathbf x_j\in\mathbb R^k\]</div><div class="step-explain"><strong>Field embedding.</strong>For one-hot field \(j\), this selects one row. All fields use the same dimension \(k\), making both dot products and concatenation well-defined.</div></div><div class="derivation-step"><div class="step-no">2</div><div class="step-formula">\[y_{FM}=w_0+\langle w,x\rangle+\sum_{j_1&lt;j_2}\langle e_{j_1},e_{j_2}\rangle\]</div><div class="step-explain"><strong>Explicit low-order branch.</strong>The bias and addition unit model zero- and first-order effects; inner-product units model every field pair.</div></div><div class="derivation-step"><div class="step-no">3</div><div class="step-formula">\[a^{(0)}=[e_1;e_2;\ldots;e_m]\]</div><div class="step-explain"><strong>Reuse the same embeddings.</strong>No FM pretraining and no second embedding table.</div></div><div class="derivation-step"><div class="step-no">4</div><div class="step-formula">\[a^{(l+1)}=\sigma_l(W^{(l)}a^{(l)}+b^{(l)})\]\[y_{DNN}=w_o^Ta^{(L)}+b_o\]</div><div class="step-explain"><strong>Implicit nonlinear branch.</strong>Hidden units mix embedding coordinates across fields, then the final hidden state is projected to one logit.</div></div><div class="derivation-step"><div class="step-no">5</div><div class="step-formula">\[\hat y=\sigma(y_{FM}+y_{DNN})\]</div><div class="step-explain"><strong>Combine at logit level.</strong>Both branches and the shared embeddings are optimized simultaneously.</div></div></div>
-      <div><figure class="compute-graph"><div class="graph-head"><strong>FM branch</strong><span>Explicit first- and second-order score</span></div><pre class="mermaid">
+      <figure class="compute-graph"><div class="graph-head"><strong>FM branch</strong><span>Explicit first- and second-order score</span></div><pre class="mermaid">
 flowchart LR
   X["Feature scalars"] --> FIRST["Weighted linear sum"]
   E["Shared feature vectors"] --> PAIRS["Dot every field pair"]
@@ -158,7 +157,7 @@ flowchart LR
 flowchart LR
   E["Shared field vectors"] --> CAT["Concatenate"] --> H1["Dense layer + activation"] --> MORE["Additional dense layers"] --> LOGIT["Deep logit"]
   class E input; class CAT merge; class H1,MORE transform; class LOGIT output;
-      </pre><figcaption>The same field vectors are flattened into one vector and passed through the MLP.</figcaption></figure></div>
+      </pre><figcaption>The same field vectors are flattened into one vector and passed through the MLP.</figcaption></figure>
       <div class="gradient-box"><h3>Shared-parameter gradient</h3><p>For field embedding \(e_j\), \(\frac{\partial\mathcal L}{\partial e_j}=\frac{\partial\mathcal L}{\partial y_{FM}}\frac{\partial y_{FM}}{\partial e_j}+\frac{\partial\mathcal L}{\partial y_{DNN}}\frac{\partial y_{DNN}}{\partial e_j}\). The learned vector is a compromise between useful pair dot products and useful DNN features.</p></div>
       <div class="math"><div class="label">Prediction decomposition</div>\[\hat y=\sigma\!\left(y_{FM}+y_{DNN}\right),\qquad y_{FM}=w_0+\sum_iw_ix_i+\sum_{i&lt;j}\langle\mathbf v_i,\mathbf v_j\rangle x_ix_j\]</div>
       <div class="shape-table"><div class="head">Stage</div><div class="head">Typical shape</div><div class="head">What happens</div><div>Field embeddings</div><div><code>[B, m, k]</code></div><div>Shared by FM and DNN</div><div>FM path</div><div><code>[B, 1]</code></div><div>Sum all pair dot products</div><div>DNN input</div><div><code>[B, m·k]</code></div><div>Flatten, then nonlinear layers</div><div>Output</div><div><code>[B, 1]</code></div><div>Add logits before sigmoid</div></div>
@@ -486,6 +485,7 @@ flowchart BT
     </div></section>
   </main>
 </div>
+<script src="../assets/mathjax-tex-svg.js"></script>
 <script src="assets/mermaid.min.js"></script>
 <script>
   mermaid.initialize({startOnLoad:false,securityLevel:'loose',theme:'base',flowchart:{htmlLabels:true,curve:'stepAfter',nodeSpacing:36,rankSpacing:62,useMaxWidth:true},themeVariables:{fontFamily:'Inter, system-ui, sans-serif',fontSize:'16px',primaryColor:'#ffffff',primaryTextColor:'#17211c',primaryBorderColor:'#789085',lineColor:'#176b52',secondaryColor:'#dcece5',tertiaryColor:'#f6ead2',clusterBkg:'#edf2ee',clusterBorder:'#9aaca1'},themeCSS:'.edgePath .path{stroke-width:3px!important}.arrowheadPath{fill:#176b52!important;stroke:#176b52!important}.edgeLabel{background-color:#f8faf8!important;color:#5c2e24!important}.cluster-label text,.cluster-label span{font-weight:800!important;color:#20352a!important}.nodeLabel{line-height:1.45!important}' });
@@ -493,8 +493,10 @@ flowchart BT
   const graphLegend='<div class="graph-legend" aria-label="Diagram color legend"><span><i class="l-input"></i>Input</span><span><i class="l-param"></i>Parameter</span><span><i class="l-interaction"></i>Interaction</span><span><i class="l-transform"></i>Transform</span><span><i class="l-merge"></i>Merge</span><span><i class="l-norm"></i>Normalize</span><span><i class="l-output"></i>Output</span></div>';
   document.querySelectorAll('.compute-graph .mermaid').forEach(el=>el.insertAdjacentHTML('afterend',graphLegend));
   const buttons=[...document.querySelectorAll('.tab-btn')], tabs=[...document.querySelectorAll('.tab')], select=document.querySelector('.mobile-nav'), crumb=document.getElementById('crumb');
+  let mathQueue=Promise.resolve();
+  function renderMath(scope){if(!window.MathJax?.typesetPromise)return Promise.resolve();mathQueue=mathQueue.then(()=>MathJax.typesetPromise([scope]));return mathQueue;}
   buttons.forEach((b,i)=>{const o=document.createElement('option');o.value=b.dataset.tab;o.textContent=b.textContent.trim();select.appendChild(o);b.addEventListener('click',()=>activate(b.dataset.tab,true))});
-  function activate(id,push){const target=document.getElementById(id);if(!target)return;buttons.forEach(b=>b.classList.toggle('active',b.dataset.tab===id));tabs.forEach(t=>t.classList.toggle('active',t.id===id));select.value=id;const label=buttons.find(b=>b.dataset.tab===id)?.textContent.trim()||id;crumb.textContent=(id==='overview'||id==='comparison'?'Orientation':'Guide')+' / '+label.replace(/^\d+\s*/, '');document.title=label.replace(/^\d+\s*/, '')+' · Feature Interactions';if(push)history.replaceState(null,'','#'+id);window.scrollTo({top:0,behavior:'instant'});renderDiagrams(target);if(window.MathJax?.typesetPromise)MathJax.typesetPromise([target]);}
+  function activate(id,push){const target=document.getElementById(id);if(!target)return;buttons.forEach(b=>b.classList.toggle('active',b.dataset.tab===id));tabs.forEach(t=>t.classList.toggle('active',t.id===id));select.value=id;const label=buttons.find(b=>b.dataset.tab===id)?.textContent.trim()||id;crumb.textContent=(id==='overview'||id==='comparison'?'Orientation':'Guide')+' / '+label.replace(/^\d+\s*/, '');document.title=label.replace(/^\d+\s*/, '')+' · Feature Interactions';if(push)history.replaceState(null,'','#'+id);window.scrollTo({top:0,behavior:'instant'});renderDiagrams(target);renderMath(target);}
   select.addEventListener('change',()=>activate(select.value,true));document.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>{const a=document.getElementById(b.dataset.answer);a.classList.toggle('show');b.textContent=a.classList.contains('show')?'Hide answer':'Reveal answer'}));activate(location.hash.slice(1)||'overview',false);
 </script>
 </body>

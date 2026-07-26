@@ -6,9 +6,8 @@
   <meta name="description" content="A from-scratch visual and mathematical guide to HSTU and generative recommendation.">
   <title>HSTU · Visual Field Guide</title>
   <script>
-    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' } };
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
   </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <link rel="stylesheet" href="../assets/guide.css">
 </head>
 <body data-guide-title="HSTU" style="--accent:#176b52;--accent-dark:#104b3a;--accent-soft:#dcece5">
@@ -408,6 +407,7 @@ flowchart LR
     </div></section>
   </main>
 </div>
+<script src="../assets/mathjax-tex-svg.js"></script>
 <script src="../assets/mermaid.min.js"></script>
 <script src="../assets/guide.js"></script>
 </body>

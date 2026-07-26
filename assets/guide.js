@@ -41,6 +41,15 @@
     return Promise.resolve();
   }
 
+  var mathQueue = Promise.resolve();
+  function renderMath(scopes) {
+    if (!window.MathJax || !window.MathJax.typesetPromise) return Promise.resolve();
+    mathQueue = mathQueue.then(function () {
+      return window.MathJax.typesetPromise(scopes);
+    });
+    return mathQueue;
+  }
+
   var buttons = Array.prototype.slice.call(document.querySelectorAll(".tab-btn"));
   var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab"));
   var select = document.querySelector(".mobile-nav");
@@ -112,9 +121,7 @@
     if (push) history.replaceState(null, "", "#" + selected.dataset.tab);
 
     var diagramPromise = renderDiagrams(activeTabs);
-    var mathPromise = window.MathJax && window.MathJax.typesetPromise
-      ? window.MathJax.typesetPromise(activeTabs)
-      : Promise.resolve();
+    var mathPromise = renderMath(activeTabs);
     var shouldDeepLink = !push && requested && requested.id !== selected.dataset.tab;
 
     if (!shouldDeepLink) window.scrollTo({ top: 0, behavior: "instant" });
