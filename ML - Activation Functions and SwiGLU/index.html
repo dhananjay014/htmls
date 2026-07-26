@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="A from-scratch visual and numerical guide to sigmoid, tanh, ReLU, GELU, SiLU, Transformer residual paths, and SwiGLU gated feed-forward networks.">
+  <title>Activation Functions &amp; SwiGLU · Visual Field Guide</title>
+  <script>
+    window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, startup: { typeset: false } };
+  </script>
+  <link rel="stylesheet" href="../assets/guide.css">
+  <style>
+    .activation-plot {
+      overflow: hidden;
+      margin: 26px 0;
+      border: 1px solid #bdc9c2;
+      background: white;
+      box-shadow: 0 10px 28px rgba(35, 55, 43, .07);
+    }
+    .activation-plot-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 15px 18px;
+      border-bottom: 1px solid #d4ddd7;
+      background: #e9efeb;
+    }
+    .activation-plot-head strong { font-size: 13px; }
+    .activation-plot-head span { color: #56685e; font-size: 11px; }
+    .activation-plot-scroll { overflow-x: auto; background: #fbfcfa; }
+    .activation-plot svg {
+      display: block;
+      width: 100%;
+      min-width: 760px;
+      height: auto;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    }
+    .activation-plot .grid-line { stroke: #e2e8e4; stroke-width: 1; }
+    .activation-plot .axis { stroke: #708078; stroke-width: 1.6; }
+    .activation-plot .axis-label { fill: #697870; font-size: 12px; }
+    .activation-plot .zero-band { fill: #f3ead7; opacity: .65; }
+    .activation-plot .curve { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
+    .activation-plot .curve-relu { stroke: #176b52; }
+    .activation-plot .curve-gelu { stroke: #316790; }
+    .activation-plot .curve-silu { stroke: #b5720c; }
+    .activation-plot .curve-tanh { stroke: #a24b3f; }
+    .activation-plot .curve-sigmoid { stroke: #74528c; }
+    .curve-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 20px;
+      padding: 11px 18px;
+      border-top: 1px solid #d8dfda;
+      color: #415047;
+      font-size: 10px;
+    }
+    .curve-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .curve-legend i { width: 18px; height: 3px; background: var(--curve); }
+    .activation-plot figcaption {
+      padding: 12px 18px 15px;
+      border-top: 1px solid #d8dfda;
+      background: #fbfcfa;
+      color: #405148;
+      font-size: 12px;
+    }
+    .activation-explorer {
+      margin: 28px 0;
+      padding: 20px;
+      border: 1px solid #b8c7be;
+      background: #eef3ef;
+    }
+    .activation-explorer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+    .activation-explorer-head strong { font-size: 14px; }
+    .activation-explorer-head output {
+      min-width: 74px;
+      padding: 7px 10px;
+      background: #203d31;
+      color: white;
+      font: 800 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-align: center;
+    }
+    .activation-explorer input { width: 100%; accent-color: var(--accent); }
+    .activation-results {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 16px;
+      border: 1px solid #c7d1cb;
+      background: #c7d1cb;
+    }
+    .activation-result { padding: 13px; background: white; }
+    .activation-result b { display: block; color: #4f6157; font-size: 10px; text-transform: uppercase; }
+    .activation-result span { display: block; margin-top: 4px; color: #17211c; font: 800 17px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .numeric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin: 22px 0;
+    }
+    .numeric-card {
+      overflow-x: auto;
+      padding: 17px;
+      border: 1px solid #cbd5cf;
+      border-top: 3px solid var(--accent);
+      background: white;
+    }
+    .numeric-card b { display: block; margin-bottom: 8px; font-size: 12px; }
+    .numeric-card code { white-space: nowrap; font-size: 12px; }
+    .chain {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      margin: 22px 0;
+      padding: 18px;
+      border: 1px solid #cbd5cf;
+      background: #f8faf8;
+    }
+    .chain-step {
+      min-width: 112px;
+      padding: 12px;
+      border: 1px solid #c3cec7;
+      background: white;
+      text-align: center;
+    }
+    .chain-step b { display: block; color: var(--accent); font-size: 11px; }
+    .chain-step span { font: 800 15px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .chain-arrow { color: var(--accent); font-size: 20px; font-weight: 900; }
+    .saturation-zone {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      margin: 20px 0;
+      border: 1px solid #ccd5d0;
+      background: #ccd5d0;
+    }
+    .saturation-zone > div { padding: 18px; background: white; }
+    .saturation-zone b { display: block; margin-bottom: 5px; font-size: 12px; }
+    .saturation-zone .flat { background: #f7e9e5; }
+    .saturation-zone .useful { background: #e5f0ea; }
+    .gate-table table { min-width: 980px; font-variant-numeric: tabular-nums; }
+    .worked-matrix { overflow-x: auto; }
+    .worked-matrix .math { min-width: 700px; }
+    .calc-list {
+      max-width: 100%;
+      overflow-x: auto;
+      margin: 16px 0 22px;
+      border: 1px solid #d1d9d4;
+      background: white;
+    }
+    .calc-line {
+      display: grid;
+      grid-template-columns: 116px max-content;
+      align-items: baseline;
+      min-width: max-content;
+      padding: 9px 13px;
+      border-bottom: 1px solid #e2e7e4;
+      font-size: 13px;
+    }
+    .calc-line:last-child { border-bottom: 0; }
+    .calc-line strong { color: var(--accent-dark); }
+    .calc-line mjx-container { margin: 0 !important; }
+    .tensor-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(145px, 1fr));
+      gap: 1px;
+      overflow-x: auto;
+      margin: 22px 0;
+      border: 1px solid #cad4ce;
+      background: #cad4ce;
+    }
+    .tensor-step { min-width: 145px; padding: 14px; background: white; }
+    .tensor-step b { display: block; color: var(--accent); font-size: 11px; }
+    .tensor-step code { display: block; margin-top: 6px; white-space: nowrap; }
+    .paper-stack { display: grid; gap: 10px; margin: 22px 0; }
+    .paper-stack .paper { margin: 0; }
+    @media (max-width: 820px) {
+      .activation-plot { margin-right: -12px; margin-left: -12px; }
+      .activation-plot-head, .activation-explorer-head { align-items: flex-start; flex-direction: column; }
+      .activation-plot svg { min-width: 850px; }
+      .activation-results { grid-template-columns: 1fr 1fr; }
+      .numeric-grid { grid-template-columns: 1fr; }
+      .saturation-zone { grid-template-columns: 1fr; }
+      .paper-stack .paper { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body data-guide-title="Activation Functions &amp; SwiGLU" style="--accent:#8a4d2f;--accent-dark:#62341f;--accent-soft:#f1e3db">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"><span class="brand-icon">φ</span><span>Activations &amp; SwiGLU</span></div>
+      <p>From saturation and gradient flow to smooth gates and a complete SwiGLU calculation.</p>
+    </div>
+    <div class="nav-label">Guide</div>
+    <button class="tab-btn active" data-tab="build" data-panels="overview,saturation,relu,smooth"><span class="num">01</span>Build the idea</button>
+    <button class="tab-btn" data-tab="reason" data-panels="gradients,transformers,swiglu,worked,tradeoffs"><span class="num">02</span>Reason with it</button>
+    <div class="nav-label">Study</div>
+    <button class="tab-btn" data-tab="revision"><span class="num">03</span>Revision sheet</button>
+    <button class="tab-btn" data-tab="references"><span class="num">04</span>Papers &amp; sources</button>
+    <div class="side-foot"><a href="../">← All guides</a><a href="../ML%20-%20Self%20Attention%20and%20Multi-Head%20Attention/">Self-attention guide</a></div>
+  </aside>
+
+  <main class="content">
+    <header class="topbar">
+      <select class="mobile-nav" aria-label="Choose section"></select>
+      <span class="crumb" id="crumb">Activation Functions &amp; SwiGLU / Build the idea</span>
+      <div class="top-actions"><a class="top-link" href="../">All guides</a><a class="top-link" href="papers/SwiGLU.pdf">SwiGLU PDF</a></div>
+    </header>
+
+    <section class="tab active" id="overview"><div class="page">
+      <div class="eyebrow">Neural-network foundations · from scalar curves to gated FFNs</div>
+      <h1>An activation decides what a layer can express—and what gradient can return.</h1>
+      <p class="lede">Sigmoid and tanh compress values into bounded ranges. ReLU removes that positive-side bottleneck. GELU and SiLU replace the hard threshold with smooth input-dependent weighting. SwiGLU goes one step further: it learns the candidate feature and its gate with separate projections.</p>
+      <div class="meta-row"><span class="chip primary">real-number examples</span><span class="chip">exact derivatives</span><span class="chip">function curves</span><span class="chip">residual paths</span><span class="chip">complete SwiGLU</span></div>
+
+      <h2>Why insert a nonlinear activation?</h2>
+      <div class="math"><span class="label">Without nonlinearity, depth collapses</span>
+        \[W_3\!\left(W_2(W_1x+b_1)+b_2\right)+b_3
+        =W_{\text{effective}}x+b_{\text{effective}}\]
+      </div>
+      <p>Composing affine maps still gives one affine map. An activation \(\phi\) breaks that collapse, so a stack can bend, gate, and combine features differently in different regions of the input space.</p>
+
+      <figure class="activation-plot">
+        <div class="activation-plot-head"><strong>Five activation curves on the same axes</strong><span>The shaded band marks the near-zero decision region.</span></div>
+        <div class="activation-plot-scroll">
+          <svg viewBox="0 0 900 390" data-activation-plot role="img" aria-labelledby="activation-plot-title activation-plot-desc">
+            <title id="activation-plot-title">Sigmoid, tanh, ReLU, GELU, and SiLU curves</title>
+            <desc id="activation-plot-desc">Sigmoid and tanh are bounded and flatten at both extremes. ReLU is zero for negative inputs and linear for positive inputs. GELU and SiLU are smooth and have a small negative region.</desc>
+            <rect class="zero-band" x="415.6" y="30" width="98.8" height="310"/>
+            <g aria-hidden="true">
+              <line class="grid-line" x1="70" y1="340" x2="860" y2="340"/><line class="grid-line" x1="70" y1="282.6" x2="860" y2="282.6"/>
+              <line class="grid-line" x1="70" y1="225.2" x2="860" y2="225.2"/><line class="grid-line" x1="70" y1="167.8" x2="860" y2="167.8"/>
+              <line class="grid-line" x1="70" y1="110.4" x2="860" y2="110.4"/><line class="grid-line" x1="70" y1="53" x2="860" y2="53"/>
+              <line class="grid-line" x1="70" y1="30" x2="70" y2="340"/><line class="grid-line" x1="168.8" y1="30" x2="168.8" y2="340"/>
+              <line class="grid-line" x1="267.5" y1="30" x2="267.5" y2="340"/><line class="grid-line" x1="366.3" y1="30" x2="366.3" y2="340"/>
+              <line class="grid-line" x1="465" y1="30" x2="465" y2="340"/><line class="grid-line" x1="563.8" y1="30" x2="563.8" y2="340"/>
+              <line class="grid-line" x1="662.5" y1="30" x2="662.5" y2="340"/><line class="grid-line" x1="761.3" y1="30" x2="761.3" y2="340"/>
+              <line class="grid-line" x1="860" y1="30" x2="860" y2="340"/>
+              <line class="axis" x1="70" y1="271.1" x2="860" y2="271.1"/><line class="axis" x1="465" y1="30" x2="465" y2="340"/>
+              <text class="axis-label" x="63" y="363">−4</text><text class="axis-label" x="261" y="363">−2</text><text class="axis-label" x="460" y="363">0</text><text class="axis-label" x="658" y="363">2</text><text class="axis-label" x="853" y="363">4</text>
+              <text class="axis-label" x="40" y="345">−1</text><text class="axis-label" x="49" y="276">0</text><text class="axis-label" x="49" y="219">1</text><text class="axis-label" x="49" y="162">2</text><text class="axis-label" x="49" y="105">3</text><text class="axis-label" x="49" y="48">4</text>
+            </g>
+            <path class="curve curve-sigmoid" data-curve="sigmoid"/><path class="curve curve-tanh" data-curve="tanh"/>
+            <path class="curve curve-relu" data-curve="relu"/><path class="curve curve-gelu" data-curve="gelu"/><path class="curve curve-silu" data-curve="silu"/>
+          </svg>
+        </div>
+        <div class="curve-legend"><span><i style="--curve:#74528c"></i>Sigmoid</span><span><i style="--curve:#a24b3f"></i>Tanh</span><span><i style="--curve:#176b52"></i>ReLU</span><span><i style="--curve:#316790"></i>GELU</span><span><i style="--curve:#b5720c"></i>SiLU</span></div>
+        <figcaption>All three unbounded activations approach the identity line for large positive inputs. GELU and SiLU keep a small, smooth negative region instead of ReLU’s exact zero.</figcaption>
+      </figure>
+
+      <div class="activation-explorer" data-activation-explorer>
+        <div class="activation-explorer-head"><strong>Move one scalar through every function</strong><output data-input-value>x = −1.0</output></div>
+        <input type="range" min="-4" max="4" step="0.1" value="-1" aria-label="Activation input value">
+        <div class="activation-results">
+          <div class="activation-result"><b>Sigmoid</b><span data-output="sigmoid">0.2689</span></div>
+          <div class="activation-result"><b>Tanh</b><span data-output="tanh">−0.7616</span></div>
+          <div class="activation-result"><b>ReLU</b><span data-output="relu">0.0000</span></div>
+          <div class="activation-result"><b>GELU</b><span data-output="gelu">−0.1587</span></div>
+          <div class="activation-result"><b>SiLU</b><span data-output="silu">−0.2689</span></div>
+        </div>
+      </div>
+
+      <div class="grid3">
+        <div class="concept"><h3>Bounded squashing</h3><p>Sigmoid maps to \((0,1)\); tanh maps to \((-1,1)\). Useful for probabilities and bounded states, risky across deep hidden stacks.</p></div>
+        <div class="concept"><h3>Hard selection</h3><p>ReLU passes positive values unchanged and maps negative values to exactly zero.</p></div>
+        <div class="concept"><h3>Soft selection</h3><p>GELU and SiLU multiply the input by a smooth gate, preserving graded information near zero.</p></div>
+      </div>
+      <div class="callout"><strong>Memory hook</strong><p>Sigmoid and tanh squash. ReLU clips. GELU and SiLU weigh. SwiGLU learns a separate feature and gate.</p></div>
+    </div></section>
+
+    <section class="tab" id="saturation"><div class="page">
+      <div class="eyebrow">Bounded functions · where gradients become flat</div>
+      <h1>Saturation means the output barely changes when the input moves.</h1>
+      <p class="lede">Sigmoid and tanh are not “bad functions.” Their bounded ranges are valuable. The problem is using many saturated hidden layers, where the chain rule repeatedly multiplies by small derivatives.</p>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Sigmoid</b>\[\sigma(x)=\frac{1}{1+e^{-x}}\]\[\sigma'(x)=\sigma(x)(1-\sigma(x))\]<p>Range \((0,1)\); maximum derivative \(0.25\).</p></div>
+        <div class="formula-card"><b>Tanh</b>\[\tanh(x)=\frac{e^x-e^{-x}}{e^x+e^{-x}}\]\[\tanh'(x)=1-\tanh^2(x)\]<p>Range \((-1,1)\); derivative is \(1\) at zero but approaches zero at both tails.</p></div>
+      </div>
+
+      <div class="saturation-zone">
+        <div class="flat"><b>Large negative input</b><p>Sigmoid approaches \(0\), tanh approaches \(-1\), and both derivatives approach \(0\).</p></div>
+        <div class="useful"><b>Near zero</b><p>The curves still move. Sigmoid’s derivative peaks at \(0.25\); tanh’s peaks at \(1\).</p></div>
+        <div class="flat"><b>Large positive input</b><p>Sigmoid approaches \(1\), tanh approaches \(1\), and both derivatives again approach \(0\).</p></div>
+      </div>
+
+      <h2>A ten-layer activation-only thought experiment</h2>
+      <p>At \(x=3\), the sigmoid derivative is about \(0.04518\). Isolating only the activation factors:</p>
+      <div class="math"><span class="label">Ten saturated sigmoid factors</span>
+        \[(0.04518)^{10}\approx3.54\times10^{-14}\]
+      </div>
+      <p>For tanh at \(x=3\), \(\tanh'(3)\approx0.009866\), so:</p>
+      <div class="math"><span class="label">Ten saturated tanh factors</span>
+        \[(0.009866)^{10}\approx8.74\times10^{-21}\]
+      </div>
+      <div class="callout red"><strong>This is an isolation, not a full-network prediction.</strong><p>Real gradients also multiply weight matrices, normalization Jacobians, residual paths, and loss derivatives. The calculation shows why repeatedly saturated activations are dangerous; it does not claim every deep sigmoid network has exactly this gradient.</p></div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Repeated multiplication creates the bottleneck</strong><span>One small local derivative is manageable; a long product is not.</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  G["gradient from loss"] --> D5["× 0.2"] --> D4["× 0.2"] --> D3["× 0.2"] --> D2["× 0.2"] --> D1["× 0.2"] --> EARLY["gradient reaching early layer"]
+  class G input; class D1,D2,D3,D4,D5 risk; class EARLY output;
+  classDef input fill:#e3edf3,stroke:#316790,stroke-width:2px;
+  classDef risk fill:#f4e2df,stroke:#a23f35,stroke-width:2px;
+  classDef output fill:#203d31,color:#fff,stroke:#203d31,stroke-width:2px;
+        </pre></div>
+        <figcaption>Five factors of \(0.2\) already give \(0.00032\); ten give \(1.024\times10^{-7}\). Weight and residual terms can change the final result.</figcaption>
+      </figure>
+
+      <h2>Where these functions still belong</h2>
+      <div class="grid2">
+        <div class="note"><h3>Sigmoid output</h3><p>A binary probability must live in \((0,1)\). Sigmoid is a natural output map even when hidden layers use another activation.</p></div>
+        <div class="note"><h3>Sigmoid gate</h3><p>LSTM, GRU, and GLU gates intentionally need a soft fraction between zero and one.</p></div>
+        <div class="note"><h3>Tanh state update</h3><p>Bounded signed updates are useful in recurrent state dynamics.</p></div>
+        <div class="note"><h3>Shallow networks</h3><p>Saturation is much less severe when the chain is short and preactivations stay near zero.</p></div>
+      </div>
+    </div></section>
+
+    <section class="tab" id="relu"><div class="page">
+      <div class="eyebrow">Rectification · one unsaturated half-space</div>
+      <h1>ReLU’s positive side passes signal and gradient without squashing.</h1>
+      <div class="math"><span class="label">Rectified linear unit</span>
+        \[\operatorname{ReLU}(x)=\max(0,x),\qquad
+        \operatorname{ReLU}'(x)=
+        \begin{cases}0&amp;x\lt0\\1&amp;x\gt0\end{cases}\]
+      </div>
+
+      <div class="numeric-grid">
+        <div class="numeric-card"><b>Negative input</b><code>ReLU(−1) = 0</code><p>The feature is exactly off and its local derivative is zero.</p></div>
+        <div class="numeric-card"><b>Positive input</b><code>ReLU(3) = 3</code><p>The activation factor in backpropagation is exactly \(1\).</p></div>
+        <div class="numeric-card"><b>At zero</b><code>derivative undefined</code><p>Libraries choose a subgradient convention, commonly \(0\).</p></div>
+      </div>
+
+      <h2>Why it was such an effective default</h2>
+      <div class="grid2">
+        <div class="concept"><h3>No positive-side saturation</h3><p>Large positive features remain large, and the activation derivative stays \(1\).</p></div>
+        <div class="concept"><h3>Cheap operation</h3><p>A comparison with zero is simpler than an exponential or Gaussian CDF.</p></div>
+        <div class="concept"><h3>Exact sparsity</h3><p>Negative preactivations become exact zeros, creating input-dependent inactive units.</p></div>
+        <div class="concept"><h3>Piecewise-linear geometry</h3><p>Different active-unit patterns partition input space into many affine regions.</p></div>
+      </div>
+
+      <h2>The failure mode: a dead unit</h2>
+      <p>If a unit’s preactivation stays negative for every training example, then both output and local derivative stay zero. Its incoming weights receive no gradient through that path.</p>
+      <div class="math"><span class="label">Leaky alternative</span>
+        \[\operatorname{LeakyReLU}(x)=
+        \begin{cases}x&amp;x\gt0\\\alpha x&amp;x\leq0\end{cases},
+        \qquad 0\lt\alpha\ll1\]
+      </div>
+      <div class="callout"><strong>Balanced conclusion</strong><p>ReLU is a strong, inexpensive baseline—not a universal winner. Smooth or gated activations can outperform it, while sparse ReLU variants can be attractive when inference efficiency matters.</p></div>
+    </div></section>
+
+    <section class="tab" id="smooth"><div class="page">
+      <div class="eyebrow">Smooth weighting · GELU and SiLU</div>
+      <h1>GELU and SiLU turn the hard switch into a graded gate.</h1>
+      <div class="formula-grid">
+        <div class="formula-card"><b>GELU</b>\[\operatorname{GELU}(x)=x\Phi(x)\]<p>\(\Phi(x)\) is the standard normal CDF. The input is weighted by a Gaussian probability.</p></div>
+        <div class="formula-card"><b>SiLU / Swish-1</b>\[\operatorname{SiLU}(x)=x\sigma(x)\]<p>The sigmoid provides an input-dependent fraction, while multiplication keeps the output unbounded.</p></div>
+      </div>
+
+      <div class="math"><span class="label">Common GELU approximation</span>
+        \[\operatorname{GELU}(x)\approx
+        \frac{x}{2}\left(1+\tanh\!\left[\sqrt{\frac{2}{\pi}}
+        \left(x+0.044715x^3\right)\right]\right)\]
+      </div>
+
+      <h2>Same inputs, visibly different decisions</h2>
+      <div class="table-wrap gate-table"><table><thead><tr><th>\(x\)</th><th>Sigmoid</th><th>Tanh</th><th>ReLU</th><th>GELU</th><th>SiLU</th></tr></thead><tbody>
+        <tr><td>−3</td><td>0.0474</td><td>−0.9951</td><td>0</td><td>−0.0040</td><td>−0.1423</td></tr>
+        <tr><td>−1</td><td>0.2689</td><td>−0.7616</td><td>0</td><td>−0.1587</td><td>−0.2689</td></tr>
+        <tr><td>0</td><td>0.5000</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><td>1</td><td>0.7311</td><td>0.7616</td><td>1</td><td>0.8413</td><td>0.7311</td></tr>
+        <tr><td>3</td><td>0.9526</td><td>0.9951</td><td>3</td><td>2.9960</td><td>2.8577</td></tr>
+      </tbody></table></div>
+
+      <h2>The derivatives explain the smooth transition</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>GELU derivative</b>\[\operatorname{GELU}'(x)=\Phi(x)+x\phi(x)\]<p>\(\phi(x)\) is the standard normal density.</p></div>
+        <div class="formula-card"><b>SiLU derivative</b>\[\operatorname{SiLU}'(x)=\sigma(x)+x\sigma(x)(1-\sigma(x))\]<p>The derivative can be slightly negative or slightly larger than \(1\).</p></div>
+      </div>
+
+      <div class="callout blue"><strong>Non-monotonic does not mean unstable.</strong><p>GELU and SiLU have a shallow negative dip. That gives a narrow region where increasing \(x\) decreases the output. The effect is bounded and is part of their soft-selection behavior.</p></div>
+      <div class="paper"><div><strong>Gaussian Error Linear Units (GELUs)</strong>Hendrycks &amp; Gimpel · 2016</div><div class="paper-links"><a href="papers/GELU.pdf">Local PDF</a><a href="https://arxiv.org/abs/1606.08415">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="gradients"><div class="page">
+      <div class="eyebrow">Backpropagation · what the local derivative can and cannot tell you</div>
+      <h1>Activation derivatives are factors in the gradient—not the whole gradient.</h1>
+      <div class="math"><span class="label">One hidden stack</span>
+        \[\frac{\partial L}{\partial h_0}
+        =\frac{\partial L}{\partial h_L}
+        \prod_{\ell=L}^{1}
+        \left(W_\ell^\top\operatorname{diag}\!\left[\phi'(z_\ell)\right]\right)\]
+      </div>
+      <p>The activation contributes the diagonal derivative term. Weight singular values, normalization, residual addition, and the loss can shrink or amplify the product too.</p>
+
+      <h2>Derivative values at the same scalar inputs</h2>
+      <div class="table-wrap gate-table"><table><thead><tr><th>\(x\)</th><th>\(\sigma'(x)\)</th><th>\(\tanh'(x)\)</th><th>ReLU′</th><th>GELU′</th><th>SiLU′</th></tr></thead><tbody>
+        <tr><td>−3</td><td>0.0452</td><td>0.0099</td><td>0</td><td>−0.0119</td><td>−0.0881</td></tr>
+        <tr><td>−1</td><td>0.1966</td><td>0.4200</td><td>0</td><td>−0.0833</td><td>0.0723</td></tr>
+        <tr><td>0</td><td>0.2500</td><td>1.0000</td><td>undefined</td><td>0.5000</td><td>0.5000</td></tr>
+        <tr><td>1</td><td>0.1966</td><td>0.4200</td><td>1</td><td>1.0833</td><td>0.9277</td></tr>
+        <tr><td>3</td><td>0.0452</td><td>0.0099</td><td>1</td><td>1.0119</td><td>1.0881</td></tr>
+      </tbody></table></div>
+
+      <div class="chain" aria-label="Example chain of local derivative factors">
+        <div class="chain-step"><b>loss gradient</b><span>1.000</span></div><div class="chain-arrow">×</div>
+        <div class="chain-step"><b>layer 4</b><span>0.20</span></div><div class="chain-arrow">×</div>
+        <div class="chain-step"><b>layer 3</b><span>0.20</span></div><div class="chain-arrow">×</div>
+        <div class="chain-step"><b>layer 2</b><span>0.20</span></div><div class="chain-arrow">×</div>
+        <div class="chain-step"><b>layer 1</b><span>0.20</span></div><div class="chain-arrow">=</div>
+        <div class="chain-step"><b>arrives as</b><span>0.0016</span></div>
+      </div>
+      <div class="quiz"><h3>Check the claim</h3><p>Does ReLU guarantee that gradients never vanish?</p><button data-answer="relu-gradient-answer">Reveal answer</button><div class="answer" id="relu-gradient-answer">No. Negative ReLU units have derivative zero, weight matrices can contract gradients, and other operations can shrink them. ReLU only removes positive-side saturation from the activation itself.</div></div>
+    </div></section>
+
+    <section class="tab" id="transformers"><div class="page">
+      <div class="eyebrow">Transformer context · residual stream and normalization</div>
+      <h1>The residual preserves the state; the FFN proposes an update.</h1>
+      <p class="lede">Saying “Transformers do not need ReLU sparsity because they have normalization and residuals” is too compressed. Residuals and normalization do not replace sparsity. They make deep information and gradient flow less dependent on one activation’s hard zeroing behavior.</p>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Pre-normalized Transformer update</strong><span>The identity route does not pass through the activation.</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["residual state x"] --> ADD["add"]
+  X --> N["Norm(x)"]
+  N --> FFN["FFN update F"]
+  FFN --> ADD
+  ADD --> Y["new state y"]
+  class X input; class N route; class FFN op; class ADD merge; class Y output;
+  classDef input fill:#e3edf3,stroke:#316790,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f1e3db,stroke:#8a4d2f,stroke-width:2px;
+  classDef merge fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef output fill:#203d31,color:#fff,stroke:#203d31,stroke-width:2px;
+        </pre></div>
+        <figcaption>Modern architectures vary in exact normalization placement. The key residual idea is the same: \(x\) has a direct additive route to the output.</figcaption>
+      </figure>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Forward path</b>\[y=x+F(\operatorname{Norm}(x))\]<p>The block can learn a correction instead of rebuilding the whole representation.</p></div>
+        <div class="formula-card"><b>Backward path</b>\[\frac{\partial y}{\partial x}=I+\frac{\partial F(\operatorname{Norm}(x))}{\partial x}\]<p>The identity term gives gradients a direct route around the nonlinear branch.</p></div>
+      </div>
+
+      <h2>What normalization contributes</h2>
+      <div class="math"><span class="label">LayerNorm core, before learned scale and shift</span>
+        \[\operatorname{LN}(x)=\frac{x-\mu}{\sqrt{\sigma^2+\epsilon}}\]
+      </div>
+      <p>Normalization controls the scale presented to a sublayer. That reduces uncontrolled drift and often keeps GELU or SiLU in regions with useful derivatives. RMSNorm controls root-mean-square scale without recentering. Neither operation creates ReLU-style exact sparsity by itself.</p>
+
+      <div class="grid3">
+        <div class="concept"><h3>Residual</h3><p>Preserves the old representation and adds a learned update.</p></div>
+        <div class="concept"><h3>Normalization</h3><p>Controls the scale entering the update branch.</p></div>
+        <div class="concept"><h3>Activation</h3><p>Shapes which candidate features the update branch expresses.</p></div>
+      </div>
+      <div class="callout"><strong>Better sentence</strong><p>Transformers get much of their training stability and information flow from normalization and residual connections, so their FFNs can use smooth selection without relying on ReLU’s hard zeroing to make deep optimization workable.</p></div>
+    </div></section>
+
+    <section class="tab" id="swiglu"><div class="page">
+      <div class="eyebrow">Gated feed-forward networks · separate gate and content</div>
+      <h1>SwiGLU learns what feature to create and how strongly to pass it.</h1>
+      <p class="lede">A plain FFN projects once, applies one activation, and projects back. SwiGLU makes two independent input projections: one becomes a SiLU gate, the other becomes candidate content. Their elementwise product is then projected back to the residual width.</p>
+
+      <div class="formula-grid">
+        <div class="formula-card"><b>Plain activation FFN</b>\[\operatorname{FFN}(x)=\phi(xW_1+b_1)W_2+b_2\]<p>One projected scalar determines both feature value and activation state.</p></div>
+        <div class="formula-card"><b>SwiGLU FFN</b>\[\operatorname{FFN}(x)=\left[\operatorname{SiLU}(xW_g)\odot(xW_v)\right]W_o\]<p>Gate and candidate content have separate learned projections.</p></div>
+      </div>
+
+      <figure class="diagram">
+        <div class="diagram-head"><strong>Two input branches, one multiplicative interaction</strong><span>Every token is processed independently by the FFN.</span></div>
+        <div class="diagram-body"><pre class="mermaid">
+flowchart LR
+  X["token state x<br/>width d"] --> G["gate projection<br/>x W_g"]
+  X --> V["value projection<br/>x W_v"]
+  G --> S["SiLU gate"]
+  S --> MUL["elementwise multiply"]
+  V --> MUL
+  MUL --> O["output projection<br/>W_o"]
+  O --> U["FFN update<br/>width d"]
+  class X input; class G,V param; class S route; class MUL op; class O param; class U output;
+  classDef input fill:#e3edf3,stroke:#316790,stroke-width:2px;
+  classDef param fill:#f6ead2,stroke:#a66b10,stroke-width:2px;
+  classDef route fill:#eadff2,stroke:#74528c,stroke-width:2px;
+  classDef op fill:#f1e3db,stroke:#8a4d2f,stroke-width:2px;
+  classDef output fill:#203d31,color:#fff,stroke:#203d31,stroke-width:2px;
+        </pre></div>
+        <figcaption>The gate is not constrained to \([0,1]\) because SiLU multiplies the sigmoid by its input. A channel can be suppressed, passed, amplified, or sign-reversed.</figcaption>
+      </figure>
+
+      <h2>The GLU family</h2>
+      <div class="table-wrap gate-table"><table><thead><tr><th>Variant</th><th>Elementwise hidden computation</th><th>Gate nonlinearity</th></tr></thead><tbody>
+        <tr><td>GLU</td><td>\((xW_a)\odot\sigma(xW_b)\)</td><td>Sigmoid</td></tr>
+        <tr><td>ReGLU</td><td>\(\operatorname{ReLU}(xW_a)\odot(xW_b)\)</td><td>ReLU</td></tr>
+        <tr><td>GEGLU</td><td>\(\operatorname{GELU}(xW_a)\odot(xW_b)\)</td><td>GELU</td></tr>
+        <tr><td>SwiGLU</td><td>\(\operatorname{SiLU}(xW_a)\odot(xW_b)\)</td><td>SiLU / Swish</td></tr>
+      </tbody></table></div>
+      <div class="paper"><div><strong>GLU Variants Improve Transformer</strong>Noam Shazeer · 2020</div><div class="paper-links"><a href="papers/SwiGLU.pdf">Local PDF</a><a href="https://arxiv.org/abs/2002.05202">arXiv</a></div></div>
+    </div></section>
+
+    <section class="tab" id="worked"><div class="page">
+      <div class="eyebrow">Complete real-number example · one token through SwiGLU</div>
+      <h1>Project twice, gate, multiply, project back, then add the residual.</h1>
+      <p class="lede">Use one token state with \(d=3\) and a teaching hidden width \(m=4\). Biases are zero so every multiplication remains visible.</p>
+
+      <div class="math"><span class="label">Input and dimensions</span>
+        \[x=\begin{bmatrix}1&amp;-1&amp;2\end{bmatrix},
+        \qquad x:[1,3],\quad W_g,W_v:[3,4],\quad W_o:[4,3]\]
+      </div>
+
+      <div class="worked-matrix"><div class="math"><span class="label">Three learned matrices</span>
+        \[
+        W_g=\begin{bmatrix}
+        1&amp;0&amp;-1&amp;0.5\\
+        0.5&amp;1&amp;0&amp;-1\\
+        0&amp;0.5&amp;1&amp;0.5
+        \end{bmatrix},\qquad
+        W_v=\begin{bmatrix}
+        1&amp;-1&amp;0.5&amp;0\\
+        0&amp;1&amp;1&amp;-0.5\\
+        0.5&amp;0&amp;1&amp;1
+        \end{bmatrix}
+        \]
+        \[
+        W_o=\begin{bmatrix}
+        1&amp;0&amp;0.5\\
+        0&amp;1&amp;-0.5\\
+        0.5&amp;0.5&amp;0\\
+        0&amp;0.25&amp;1
+        \end{bmatrix}
+        \]
+      </div></div>
+
+      <h2>1 · Gate projection \(a=xW_g\)</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(a_1\)</strong>\(1(1)+(-1)(0.5)+2(0)=0.5\)</div>
+        <div class="calc-line"><strong>\(a_2\)</strong>\(1(0)+(-1)(1)+2(0.5)=0\)</div>
+        <div class="calc-line"><strong>\(a_3\)</strong>\(1(-1)+(-1)(0)+2(1)=1\)</div>
+        <div class="calc-line"><strong>\(a_4\)</strong>\(1(0.5)+(-1)(-1)+2(0.5)=2.5\)</div>
+      </div>
+      <div class="math">\[a=\begin{bmatrix}0.5&amp;0&amp;1&amp;2.5\end{bmatrix}\]</div>
+
+      <h2>2 · Content projection \(b=xW_v\)</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(b_1\)</strong>\(1(1)+(-1)(0)+2(0.5)=2\)</div>
+        <div class="calc-line"><strong>\(b_2\)</strong>\(1(-1)+(-1)(1)+2(0)=-2\)</div>
+        <div class="calc-line"><strong>\(b_3\)</strong>\(1(0.5)+(-1)(1)+2(1)=1.5\)</div>
+        <div class="calc-line"><strong>\(b_4\)</strong>\(1(0)+(-1)(-0.5)+2(1)=2.5\)</div>
+      </div>
+      <div class="math">\[b=\begin{bmatrix}2&amp;-2&amp;1.5&amp;2.5\end{bmatrix}\]</div>
+
+      <h2>3 · Apply the SiLU gate</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(\operatorname{SiLU}(0.5)\)</strong>\(0.5/(1+e^{-0.5})=0.3112\)</div>
+        <div class="calc-line"><strong>\(\operatorname{SiLU}(0)\)</strong>\(0/(1+e^0)=0\)</div>
+        <div class="calc-line"><strong>\(\operatorname{SiLU}(1)\)</strong>\(1/(1+e^{-1})=0.7311\)</div>
+        <div class="calc-line"><strong>\(\operatorname{SiLU}(2.5)\)</strong>\(2.5/(1+e^{-2.5})=2.3104\)</div>
+      </div>
+      <div class="math">\[\operatorname{SiLU}(a)=\begin{bmatrix}0.3112&amp;0&amp;0.7311&amp;2.3104\end{bmatrix}\]</div>
+
+      <h2>4 · Gate × content</h2>
+      <div class="math"><span class="label">Elementwise multiplication</span>
+        \[
+        z=\operatorname{SiLU}(a)\odot b
+        =
+        \begin{bmatrix}
+        0.3112(2)&amp;0(-2)&amp;0.7311(1.5)&amp;2.3104(2.5)
+        \end{bmatrix}
+        \]
+        \[
+        z=\begin{bmatrix}0.6225&amp;0&amp;1.0966&amp;5.7759\end{bmatrix}
+        \]
+      </div>
+
+      <h2>5 · Output projection and residual</h2>
+      <div class="calc-list">
+        <div class="calc-line"><strong>\(o_1\)</strong>\(0.6225(1)+0(0)+1.0966(0.5)+5.7759(0)=1.1708\)</div>
+        <div class="calc-line"><strong>\(o_2\)</strong>\(0.6225(0)+0(1)+1.0966(0.5)+5.7759(0.25)=1.9923\)</div>
+        <div class="calc-line"><strong>\(o_3\)</strong>\(0.6225(0.5)+0(-0.5)+1.0966(0)+5.7759(1)=6.0871\)</div>
+      </div>
+      <div class="math">
+        \[o=zW_o=\begin{bmatrix}1.1708&amp;1.9923&amp;6.0871\end{bmatrix}\]
+        \[y=x+o=\begin{bmatrix}2.1708&amp;0.9923&amp;8.0871\end{bmatrix}\]
+      </div>
+      <div class="callout blue"><strong>What the numbers show</strong><p>The fourth gate value \(2.3104\) amplifies content \(2.5\) into \(5.7759\). The second gate is exactly zero here, so content \(-2\) contributes nothing. The output projection then mixes hidden channels back into the three residual dimensions.</p></div>
+      <div class="quiz"><h3>Shape check</h3><p>Why can the residual add \(x\) to \(o\), but not directly to \(z\)?</p><button data-answer="swiglu-shape-answer">Reveal answer</button><div class="answer" id="swiglu-shape-answer">The input and projected output both have width \(d=3\). The gated hidden vector \(z\) has width \(m=4\). \(W_o:[4,3]\) restores the residual width before addition.</div></div>
+    </div></section>
+
+    <section class="tab" id="tradeoffs"><div class="page">
+      <div class="eyebrow">Architecture choice · function versus gated block</div>
+      <h1>The important modern comparison is often plain FFN versus gated FFN.</h1>
+      <div class="table-wrap gate-table"><table><thead><tr><th>Choice</th><th>Strength</th><th>Main risk / cost</th><th>Common role</th></tr></thead><tbody>
+        <tr><td>Sigmoid</td><td>Probability-like gate in \((0,1)\)</td><td>Saturates at both tails</td><td>Binary output, recurrent gate</td></tr>
+        <tr><td>Tanh</td><td>Bounded, signed, zero-centered</td><td>Saturates at both tails</td><td>Bounded recurrent state</td></tr>
+        <tr><td>ReLU</td><td>Cheap, sparse, unsaturated positive side</td><td>Dead units; hard information loss</td><td>Conventional MLP/CNN baseline</td></tr>
+        <tr><td>GELU</td><td>Smooth soft selection</td><td>Dense activation; more arithmetic</td><td>BERT/GPT-style FFN</td></tr>
+        <tr><td>SiLU</td><td>Smooth self-gating, simple formula</td><td>Dense activation; modest standalone gains</td><td>Modern vision and gated FFN</td></tr>
+        <tr><td>SwiGLU</td><td>Separate content and gate projections</td><td>Third matrix and larger intermediates</td><td>Modern Transformer FFN</td></tr>
+      </tbody></table></div>
+
+      <h2>Why the hidden width often becomes \(8d/3\)</h2>
+      <div class="formula-grid">
+        <div class="formula-card"><b>Standard FFN, hidden width \(4d\)</b>\[d(4d)+(4d)d=8d^2\]<p>Two matrices, biases omitted.</p></div>
+        <div class="formula-card"><b>SwiGLU, hidden width \(m\)</b>\[dm+dm+md=3dm\]<p>Two input projections and one output projection.</p></div>
+      </div>
+      <div class="math"><span class="label">Match parameter budgets</span>
+        \[3dm=8d^2\quad\Longrightarrow\quad m=\frac{8}{3}d\]
+      </div>
+
+      <h2>Production-size tensor example</h2>
+      <p>Take \(B=16\), \(n=512\), \(d=768\), and \(m=2048=\frac{8}{3}d\).</p>
+      <div class="tensor-strip">
+        <div class="tensor-step"><b>Input</b><code>[16, 512, 768]</code></div>
+        <div class="tensor-step"><b>Gate projection</b><code>[16, 512, 2048]</code></div>
+        <div class="tensor-step"><b>Content projection</b><code>[16, 512, 2048]</code></div>
+        <div class="tensor-step"><b>Gated hidden</b><code>[16, 512, 2048]</code></div>
+        <div class="tensor-step"><b>Output</b><code>[16, 512, 768]</code></div>
+      </div>
+      <div class="grid3">
+        <div class="metric"><b>4,718,592</b><p>Weights in either the \(4d\) standard FFN or the budget-matched SwiGLU, excluding biases.</p></div>
+        <div class="metric"><b>16,777,216</b><p>Values in one \([B,n,m]\) projection tensor.</p></div>
+        <div class="metric"><b>64 MiB</b><p>Gate plus content tensors together in FP16, before gradients and other saved activations.</p></div>
+      </div>
+      <div class="callout red"><strong>Do not reduce the story to “SiLU beats ReLU.”</strong><p>Architecture, initialization, normalization, optimizer, scale, hardware kernels, sparsity goals, and parameter matching all matter. In Transformers, the multiplicative gated structure is often the larger change.</p></div>
+    </div></section>
+
+    <section class="tab" id="revision"><div class="page">
+      <div class="eyebrow">Revision sheet · reconstruct the topic quickly</div>
+      <h1>From saturation to SwiGLU in ten statements.</h1>
+      <div class="timeline">
+        <div class="event"><b>1 · Nonlinearity</b><strong>Affine maps alone collapse.</strong><p>An activation lets depth create input-dependent regions and gates.</p></div>
+        <div class="event"><b>2 · Saturation</b><strong>Flat output means a small derivative.</strong><p>Long products of small derivatives can starve early layers.</p></div>
+        <div class="event"><b>3 · Sigmoid</b><strong>Useful probability and gate, risky hidden stack.</strong><p>Range \((0,1)\), derivative at most \(0.25\).</p></div>
+        <div class="event"><b>4 · Tanh</b><strong>Signed and centered, still bounded.</strong><p>Derivative is \(1\) at zero but vanishes in both tails.</p></div>
+        <div class="event"><b>5 · ReLU</b><strong>Pass positive, delete negative.</strong><p>Cheap and sparse; positive derivative \(1\); dead-unit risk.</p></div>
+        <div class="event"><b>6 · GELU</b><strong>Weight by Gaussian probability.</strong><p>\(x\Phi(x)\) gives smooth soft selection.</p></div>
+        <div class="event"><b>7 · SiLU</b><strong>Self-gate with a sigmoid.</strong><p>\(x\sigma(x)\) keeps a broad, smooth negative region.</p></div>
+        <div class="event"><b>8 · Residual</b><strong>Preserve state, learn an update.</strong><p>The identity route carries information and gradient around the FFN.</p></div>
+        <div class="event"><b>9 · Normalization</b><strong>Control the input scale.</strong><p>It supports stable sublayers but does not create ReLU sparsity.</p></div>
+        <div class="event"><b>10 · SwiGLU</b><strong>Learn content and gate separately.</strong><p>Two input projections multiply, then one output projection restores width \(d\).</p></div>
+      </div>
+
+      <h2>Equations to reproduce</h2>
+      <div class="table-wrap"><table><thead><tr><th>Concept</th><th>Equation</th><th>Memory cue</th></tr></thead><tbody>
+        <tr><td>Sigmoid</td><td>\(\sigma(x)=1/(1+e^{-x})\)</td><td>Bounded probability</td></tr>
+        <tr><td>Tanh</td><td>\(\tanh'(x)=1-\tanh^2(x)\)</td><td>Centered but saturating</td></tr>
+        <tr><td>ReLU</td><td>\(\max(0,x)\)</td><td>Hard switch</td></tr>
+        <tr><td>GELU</td><td>\(x\Phi(x)\)</td><td>Gaussian weighting</td></tr>
+        <tr><td>SiLU</td><td>\(x\sigma(x)\)</td><td>Self-gate</td></tr>
+        <tr><td>Residual FFN</td><td>\(y=x+F(\operatorname{Norm}(x))\)</td><td>Old state + update</td></tr>
+        <tr><td>SwiGLU</td><td>\([\operatorname{SiLU}(xW_g)\odot(xW_v)]W_o\)</td><td>Gate × content</td></tr>
+      </tbody></table></div>
+
+      <div class="quiz"><h3>One-minute oral check</h3><p>Why can SwiGLU be more expressive than replacing ReLU with SiLU in a standard FFN?</p><button data-answer="revision-swiglu-answer">Reveal answer</button><div class="answer" id="revision-swiglu-answer">A standard FFN uses one projection before its activation, so the same hidden scalar is both candidate feature and gating signal. SwiGLU learns two projections and multiplies them, separating what content exists from how strongly it passes.</div></div>
+    </div></section>
+
+    <section class="tab" id="references"><div class="page">
+      <div class="eyebrow">Primary papers · local reading archive</div>
+      <h1>Read the functions first, then the gated architecture.</h1>
+      <p class="lede">The shared conversation supplied the learning questions. The definitions, historical claims, and gated-FFN comparisons below were checked against the primary papers.</p>
+
+      <div class="paper-stack">
+        <div class="paper"><div><strong>Gaussian Error Linear Units (GELUs)</strong>Dan Hendrycks &amp; Kevin Gimpel · 2016 · arXiv:1606.08415</div><div class="paper-links"><a href="papers/GELU.pdf">Local PDF</a><a href="https://arxiv.org/abs/1606.08415">arXiv</a></div></div>
+        <div class="paper"><div><strong>Sigmoid-Weighted Linear Units for Neural Network Function Approximation</strong>Stefan Elfwing, Eiji Uchibe &amp; Kenji Doya · 2017 · arXiv:1702.03118</div><div class="paper-links"><a href="papers/SiLU.pdf">Local PDF</a><a href="https://arxiv.org/abs/1702.03118">arXiv</a></div></div>
+        <div class="paper"><div><strong>Searching for Activation Functions</strong>Prajit Ramachandran, Barret Zoph &amp; Quoc V. Le · 2017 · arXiv:1710.05941</div><div class="paper-links"><a href="papers/Swish.pdf">Local PDF</a><a href="https://arxiv.org/abs/1710.05941">arXiv</a></div></div>
+        <div class="paper"><div><strong>Language Modeling with Gated Convolutional Networks</strong>Yann Dauphin, Angela Fan, Michael Auli &amp; David Grangier · 2016 · arXiv:1612.08083</div><div class="paper-links"><a href="papers/GLU.pdf">Local PDF</a><a href="https://arxiv.org/abs/1612.08083">arXiv</a></div></div>
+        <div class="paper"><div><strong>GLU Variants Improve Transformer</strong>Noam Shazeer · 2020 · arXiv:2002.05202</div><div class="paper-links"><a href="papers/SwiGLU.pdf">Local PDF</a><a href="https://arxiv.org/abs/2002.05202">arXiv</a></div></div>
+      </div>
+
+      <h2>Supporting context</h2>
+      <div class="grid2">
+        <div class="note"><h3>Layer Normalization</h3><p>The original normalization paper defines per-example layer statistics and learned gain/shift.</p><a href="https://arxiv.org/abs/1607.06450">Open arXiv</a></div>
+        <div class="note"><h3>Attention Is All You Need</h3><p>The Transformer paper specifies residual connections around attention and FFN sublayers.</p><a href="../ML%20-%20Self%20Attention%20and%20Multi-Head%20Attention/papers/Attention-Is-All-You-Need.pdf">Open local PDF</a></div>
+        <div class="note"><h3>Source conversation</h3><p>The questions that motivated this guide: ReLU versus sigmoid/tanh, GELU/SiLU, residual context, and SwiGLU.</p><a href="https://chatgpt.com/share/6a667775-328c-83ea-b677-49b898b409b8">Open shared chat</a></div>
+        <div class="note"><h3>Self-attention companion</h3><p>Continue with the guide that calculates Q/K/V, attention scores, masks, and two heads.</p><a href="../ML%20-%20Self%20Attention%20and%20Multi-Head%20Attention/">Open guide</a></div>
+      </div>
+
+      <h2>Accuracy and scope notes</h2>
+      <div class="grid2">
+        <div class="note"><h3>Derivative products</h3><p>The vanishing-gradient examples isolate activation derivatives. They deliberately hold all other Jacobian factors aside.</p></div>
+        <div class="note"><h3>Architecture claims</h3><p>“Preferred” is workload-dependent. The guide distinguishes standalone SiLU from the larger SwiGLU architectural change.</p></div>
+        <div class="note"><h3>Teaching matrices</h3><p>The numerical SwiGLU weights are original small values chosen for inspectable arithmetic, not trained parameters from a published model.</p></div>
+        <div class="note"><h3>Parameter matching</h3><p>The \(8d/3\) width follows from equating bias-free matrix parameter counts; production implementations round widths for hardware efficiency.</p></div>
+      </div>
+    </div></section>
+  </main>
+</div>
+<script src="../assets/mathjax-tex-svg.js"></script>
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/guide.js"></script>
+<script>
+  (function () {
+    "use strict";
+    function erf(x) {
+      var sign = x < 0 ? -1 : 1;
+      var value = Math.abs(x);
+      var t = 1 / (1 + 0.3275911 * value);
+      var polynomial = (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t);
+      return sign * (1 - polynomial * Math.exp(-value * value));
+    }
+    function sigmoid(x) { return 1 / (1 + Math.exp(-x)); }
+    var functions = {
+      sigmoid: sigmoid,
+      tanh: Math.tanh,
+      relu: function (x) { return Math.max(0, x); },
+      gelu: function (x) { return x * 0.5 * (1 + erf(x / Math.sqrt(2))); },
+      silu: function (x) { return x * sigmoid(x); }
+    };
+    var xMin = -4, xMax = 4, yMin = -1.2, yMax = 4.2;
+    function plotX(x) { return 70 + (x - xMin) / (xMax - xMin) * 790; }
+    function plotY(y) { return 30 + (yMax - y) / (yMax - yMin) * 310; }
+    document.querySelectorAll("[data-curve]").forEach(function (path) {
+      var fn = functions[path.dataset.curve];
+      var points = [];
+      for (var index = 0; index <= 160; index += 1) {
+        var x = xMin + (xMax - xMin) * index / 160;
+        points.push((index ? "L" : "M") + plotX(x).toFixed(2) + " " + plotY(fn(x)).toFixed(2));
+      }
+      path.setAttribute("d", points.join(" "));
+    });
+    document.querySelectorAll("[data-activation-explorer]").forEach(function (demo) {
+      var range = demo.querySelector("input[type=range]");
+      var inputValue = demo.querySelector("[data-input-value]");
+      function format(value) {
+        var rounded = Math.abs(value) < .00005 ? 0 : value;
+        return rounded.toFixed(4).replace("-", "−");
+      }
+      function update() {
+        var x = Number(range.value);
+        inputValue.textContent = "x = " + x.toFixed(1).replace("-", "−");
+        Object.keys(functions).forEach(function (name) {
+          demo.querySelector('[data-output="' + name + '"]').textContent = format(functions[name](x));
+        });
+      }
+      range.addEventListener("input", update);
+      update();
+    });
+  })();
+</script>
+</body>
+</html>

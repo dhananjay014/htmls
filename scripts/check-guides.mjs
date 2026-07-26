@@ -10,6 +10,7 @@ const pages = [
   "ML - Multimodal MMoE/index.html",
   "ML - OneRec/index.html",
   "ML - Self Attention and Multi-Head Attention/index.html",
+  "ML - Activation Functions and SwiGLU/index.html",
   "RL - PPO and GRPO/index.html"
 ];
 

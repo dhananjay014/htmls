@@ -19,6 +19,7 @@ const preferredShots = new Map([
   ["ML - Multimodal MMoE", "shazeer"],
   ["ML - OneRec", "ipa"],
   ["ML - Self Attention and Multi-Head Attention", "mha-worked"],
+  ["ML - Activation Functions and SwiGLU", "worked"],
   ["RL - PPO and GRPO", "grpo"]
 ]);
 
