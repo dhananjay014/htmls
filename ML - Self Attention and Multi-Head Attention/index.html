@@ -123,6 +123,10 @@
       font-size: 16px;
       font-weight: 800;
     }
+    .attention-flow-svg .svg-sub {
+      font-size: 68%;
+      baseline-shift: sub;
+    }
     .attention-flow-svg .output-card + .card-kicker,
     .attention-flow-svg .output-text { fill: #fff; }
     .attention-flow-legend {
@@ -278,22 +282,22 @@
             <text class="card-kicker" x="50" y="198">INPUT STATE</text>
             <text class="card-title" x="50" y="238">X</text>
             <text class="card-copy" x="50" y="270">token states</text>
-            <text class="card-shape" x="50" y="295">[n × dₘₒdₑₗ]</text>
+            <text class="card-shape" x="50" y="295">[n × d<tspan class="svg-sub">model</tspan>]</text>
 
             <rect class="card projection-card" x="250" y="40" width="180" height="100" rx="14"/>
             <text class="card-kicker" x="270" y="67">QUERY · SEEK</text>
-            <text class="card-title" x="270" y="101">Q = X · WQ</text>
-            <text class="card-shape" x="270" y="127">[n × dₖ]</text>
+            <text class="card-title" x="270" y="101">Q = X · W<tspan class="svg-sub">Q</tspan></text>
+            <text class="card-shape" x="270" y="127">[n × d<tspan class="svg-sub">k</tspan>]</text>
 
             <rect class="card projection-card" x="250" y="200" width="180" height="100" rx="14"/>
             <text class="card-kicker" x="270" y="227">KEY · MATCH</text>
-            <text class="card-title" x="270" y="261">K = X · WK</text>
-            <text class="card-shape" x="270" y="287">[n × dₖ]</text>
+            <text class="card-title" x="270" y="261">K = X · W<tspan class="svg-sub">K</tspan></text>
+            <text class="card-shape" x="270" y="287">[n × d<tspan class="svg-sub">k</tspan>]</text>
 
             <rect class="card projection-card" x="250" y="360" width="180" height="100" rx="14"/>
             <text class="card-kicker" x="270" y="387">VALUE · SEND</text>
-            <text class="card-title" x="270" y="421">V = X · WV</text>
-            <text class="card-shape" x="270" y="447">[n × dᵥ]</text>
+            <text class="card-title" x="270" y="421">V = X · W<tspan class="svg-sub">V</tspan></text>
+            <text class="card-shape" x="270" y="447">[n × d<tspan class="svg-sub">v</tspan>]</text>
 
             <rect class="card operation-card" x="505" y="145" width="200" height="150" rx="14"/>
             <text class="card-kicker" x="527" y="175">1 · COMPARE</text>
@@ -303,7 +307,7 @@
 
             <rect class="card mask-card" x="765" y="145" width="200" height="150" rx="14"/>
             <text class="card-kicker" x="787" y="175">2 · STABILIZE</text>
-            <text class="card-title" x="787" y="216">÷ √dₖ  + M</text>
+            <text class="card-title" x="787" y="216">÷ √d<tspan class="svg-sub">k</tspan> + M</text>
             <text class="card-copy" x="787" y="246">scale, then mask</text>
             <text class="card-shape" x="787" y="276">[n × n]</text>
 
